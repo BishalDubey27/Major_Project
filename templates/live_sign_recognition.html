@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Live Sign Recognition</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: Arial, sans-serif; background: #1a1a2e; color: #eee; display: flex; flex-direction: column; align-items: center; min-height: 100vh; padding: 20px; }
+        h1 { margin: 20px 0 10px; color: #00d4ff; font-size: 1.8rem; }
+
+        #camera-wrapper {
+            position: relative;
+            width: 640px;
+            height: 480px;
+            border: 2px solid #00d4ff;
+            border-radius: 8px;
+            overflow: hidden;
+            background: #000;
+        }
+        #video  { position: absolute; top: 0; left: 0; width: 100%; height: 100%; transform: scaleX(-1); }
+        #canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; transform: scaleX(-1); }
+
+        #prediction-box {
+            margin-top: 20px;
+            background: #16213e;
+            border: 1px solid #00d4ff;
+            border-radius: 8px;
+            padding: 16px 40px;
+            text-align: center;
+            min-width: 400px;
+        }
+        #prediction-label { font-size: 2rem; font-weight: bold; color: #00d4ff; min-height: 2.5rem; }
+        #confidence-label { font-size: 1rem; color: #aaa; margin-top: 4px; }
+
+        #status-bar {
+            margin-top: 12px;
+            font-size: 0.85rem;
+            color: #888;
+        }
+        .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #888; margin-right: 6px; vertical-align: middle; }
+        .dot.green { background: #00e676; }
+        .dot.red   { background: #ff1744; }
+    </style>
+</head>
+<body>
+    <!-- Nav -->
+    <nav style="display:flex;gap:10px;margin-bottom:10px;">
+        <a href="/" style="padding:8px 16px;background:rgba(255,255,255,0.1);color:#fff;border-radius:8px;text-decoration:none;font-size:0.85rem;border:1px solid rgba(255,255,255,0.2);">✍️ Text to Sign</a>
+        <a href="/sign-recognition" style="padding:8px 16px;background:rgba(255,255,255,0.1);color:#fff;border-radius:8px;text-decoration:none;font-size:0.85rem;border:1px solid rgba(255,255,255,0.2);">📁 Upload Video</a>
+        <a href="/live-sign-recognition" style="padding:8px 16px;background:rgba(0,212,255,0.2);color:#00d4ff;border-radius:8px;text-decoration:none;font-size:0.85rem;border:1px solid #00d4ff;">📹 Live Camera</a>
+        <a href="/continuous-sign-recognition" style="padding:8px 16px;background:rgba(255,255,255,0.1);color:#fff;border-radius:8px;text-decoration:none;font-size:0.85rem;border:1px solid rgba(255,255,255,0.2);">🔄 Continuous</a>
+    </nav>
+
+    <h1>Live Sign Recognition</h1>
+
+    <div id="camera-wrapper">
+        <video id="video" autoplay playsinline muted></video>
+        <canvas id="canvas"></canvas>
+    </div>
+
+    <div id="prediction-box">
+        <div id="prediction-label">—</div>
+        <div id="confidence-label">Waiting for detection…</div>
+    </div>
+
+    <div id="status-bar">
+        <span class="dot" id="cam-dot"></span><span id="cam-status">Camera: starting…</span>
+        &nbsp;&nbsp;
+        <span class="dot" id="model-dot"></span><span id="model-status">Model: checking…</span>
+    </div>
+
+    <!-- MediaPipe Holistic (hands + pose) from CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/holistic/holistic.js" crossorigin="anonymous"></script>
+
+    <script>
+    const video      = document.getElementById('video');
+    const canvas     = document.getElementById('canvas');
+    const ctx        = canvas.getContext('2d');
+    const predLabel  = document.getElementById('prediction-label');
+    const confLabel  = document.getElementById('confidence-label');
+    const camDot     = document.getElementById('cam-dot');
+    const camStatus  = document.getElementById('cam-status');
+    const modelDot   = document.getElementById('model-dot');
+    const modelStatus= document.getElementById('model-status');
+
+    // ── Check model status ──────────────────────────────────────────────
+    fetch('/api/sign-recognition-status')
+        .then(r => r.json())
+        .then(d => {
+            if (d.model_loaded) {
+                modelDot.classList.add('green');
+                modelStatus.textContent = `Model: ready (${d.n_classes} classes)`;
+            } else {
+                modelDot.classList.add('red');
+                modelStatus.textContent = 'Model: not loaded';
+            }
+        });
+
+    // ── Inference throttle ──────────────────────────────────────────────
+    let inferring = false;
+    let lastInferTime = 0;
+    const INFER_INTERVAL_MS = 800; // send a frame every 800 ms
+
+    async function sendFrameForInference() {
+        const now = Date.now();
+        if (inferring || now - lastInferTime < INFER_INTERVAL_MS) return;
+        inferring = true;
+        lastInferTime = now;
+
+        // Capture from the (un-mirrored) video into a temp canvas
+        const tmp = document.createElement('canvas');
+        tmp.width  = video.videoWidth  || 640;
+        tmp.height = video.videoHeight || 480;
+        const tctx = tmp.getContext('2d');
+        tctx.drawImage(video, 0, 0, tmp.width, tmp.height);
+
+        tmp.toBlob(async blob => {
+            try {
+                const fd = new FormData();
+                fd.append('image', blob, 'frame.jpg');
+                const res  = await fetch('/recognize-live-sign', { method: 'POST', body: fd });
+                const data = await res.json();
+                if (data.success && data.recognized_text) {
+                    predLabel.textContent = data.recognized_text;
+                    confLabel.textContent = `Confidence: ${(data.confidence * 100).toFixed(1)}%`;
+                }
+            } catch(e) {
+                console.warn('Inference error:', e);
+            } finally {
+                inferring = false;
+            }
+        }, 'image/jpeg', 0.85);
+    }
+
+    // ── MediaPipe Holistic ──────────────────────────────────────────────
+    const holistic = new Holistic({
+        locateFile: file =>
+            `https://cdn.jsdelivr.net/npm/@mediapipe/holistic/${file}`
+    });
+
+    holistic.setOptions({
+        modelComplexity: 1,
+        smoothLandmarks: true,
+        enableSegmentation: false,
+        refineFaceLandmarks: false,
+        minDetectionConfidence: 0.5,
+        minTrackingConfidence: 0.5,
+    });
+
+    holistic.onResults(results => {
+        canvas.width  = video.videoWidth  || 640;
+        canvas.height = video.videoHeight || 480;
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        // ── Draw pose skeleton (upper body) ──
+        if (results.poseLandmarks) {
+            drawConnectors(ctx, results.poseLandmarks, POSE_CONNECTIONS,
+                { color: '#00d4ff', lineWidth: 2 });
+            drawLandmarks(ctx, results.poseLandmarks,
+                { color: '#ffffff', fillColor: '#00d4ff', lineWidth: 1, radius: 3 });
+        }
+
+        // ── Draw left hand ──
+        if (results.leftHandLandmarks) {
+            drawConnectors(ctx, results.leftHandLandmarks, HAND_CONNECTIONS,
+                { color: '#00e676', lineWidth: 2 });
+            drawLandmarks(ctx, results.leftHandLandmarks,
+                { color: '#ffffff', fillColor: '#00e676', lineWidth: 1, radius: 4 });
+        }
+
+        // ── Draw right hand ──
+        if (results.rightHandLandmarks) {
+            drawConnectors(ctx, results.rightHandLandmarks, HAND_CONNECTIONS,
+                { color: '#ff6d00', lineWidth: 2 });
+            drawLandmarks(ctx, results.rightHandLandmarks,
+                { color: '#ffffff', fillColor: '#ff6d00', lineWidth: 1, radius: 4 });
+        }
+
+        // Trigger backend inference
+        sendFrameForInference();
+    });
+
+    // ── Start camera ────────────────────────────────────────────────────
+    const camera = new Camera(video, {
+        onFrame: async () => { await holistic.send({ image: video }); },
+        width: 640,
+        height: 480,
+    });
+
+    camera.start().then(() => {
+        camDot.classList.add('green');
+        camStatus.textContent = 'Camera: active';
+        console.log('📹 Live Sign Recognition interface initialized');
+    }).catch(err => {
+        camDot.classList.add('red');
+        camStatus.textContent = 'Camera: failed — ' + err.message;
+        console.error('Camera error:', err);
+    });
+    </script>
+</body>
+</html>

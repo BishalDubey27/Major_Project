@@ -1,0 +1,544 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sign to Speech - ISL Translator</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <!-- MediaPipe for landmark drawing -->
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/holistic/holistic.js" crossorigin="anonymous"></script>
+    <style>
+        body { font-family: 'Inter', sans-serif; background: linear-gradient(135deg, #0f0c29, #302b63, #24243e); min-height: 100vh; }
+        .glass { background: rgba(255,255,255,0.08); backdrop-filter: blur(12px); border: 1px solid rgba(255,255,255,0.15); }
+        .tab-btn { transition: all 0.2s; }
+        .tab-btn.active { background: rgba(99,102,241,0.8); border-color: rgba(99,102,241,1); }
+        .tab-btn:not(.active) { background: rgba(255,255,255,0.08); border-color: rgba(255,255,255,0.2); }
+        .upload-zone { border: 2px dashed rgba(255,255,255,0.25); transition: all 0.3s; }
+        .upload-zone:hover, .upload-zone.dragover { border-color: #6366f1; background: rgba(99,102,241,0.1); }
+        .loader { border: 3px solid rgba(255,255,255,0.2); border-top: 3px solid #6366f1; border-radius: 50%; width: 36px; height: 36px; animation: spin 0.8s linear infinite; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .confidence-bar { transition: width 0.6s ease; }
+        .result-in { animation: fadeUp 0.4s ease; }
+        @keyframes fadeUp { from { opacity:0; transform:translateY(16px); } to { opacity:1; transform:translateY(0); } }
+        #camera-feed { width: 100%; border-radius: 12px; background: #000; max-height: 320px; object-fit: cover; }
+        .nav-link { transition: all 0.2s; }
+        .nav-link:hover { background: rgba(255,255,255,0.15); }
+    </style>
+</head>
+<body class="p-4 md:p-6">
+<div class="max-w-6xl mx-auto">
+
+    <!-- Header -->
+    <div class="glass rounded-2xl p-5 mb-6 text-white">
+        <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+            <div>
+                <h1 class="text-2xl md:text-3xl font-bold">🎥 Sign to Speech</h1>
+                <p class="text-white/60 text-sm mt-1">Recognize Indian Sign Language from video or camera</p>
+            </div>
+            <div class="flex flex-wrap gap-2">
+                <a href="/" class="nav-link px-4 py-2 rounded-lg border border-white/20 text-white text-sm font-medium">
+                    ✍️ Text to Sign
+                </a>
+                <a href="/live-sign-recognition" class="nav-link px-4 py-2 rounded-lg border border-green-500/50 bg-green-500/20 text-white text-sm font-medium">
+                    📹 Live Camera
+                </a>
+                <a href="/continuous-sign-recognition" class="nav-link px-4 py-2 rounded-lg border border-purple-500/50 bg-purple-500/20 text-white text-sm font-medium">
+                    🔄 Continuous Detection
+                </a>
+                <button id="demo-btn" class="nav-link px-4 py-2 rounded-lg border border-blue-500/50 bg-blue-500/20 text-white text-sm font-medium">
+                    🎭 Try Demo
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Mode Tabs -->
+    <div class="flex gap-3 mb-6">
+        <button id="tab-upload" class="tab-btn active flex-1 py-3 rounded-xl border text-white font-semibold text-sm">
+            📁 Upload Video
+        </button>
+        <button id="tab-record" class="tab-btn flex-1 py-3 rounded-xl border text-white font-semibold text-sm">
+            🎙️ Record Video
+        </button>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+
+        <!-- LEFT PANEL -->
+        <div class="space-y-4">
+
+            <!-- Upload Tab -->
+            <div id="panel-upload" class="glass rounded-2xl p-6">
+                <h2 class="text-lg font-bold text-white mb-4">📤 Upload Sign Video</h2>
+                <div id="upload-zone" class="upload-zone rounded-xl p-8 text-center cursor-pointer mb-4">
+                    <div id="upload-idle">
+                        <div class="text-5xl mb-3">🎬</div>
+                        <p class="text-white font-semibold mb-1">Drop video here or click to browse</p>
+                        <p class="text-white/50 text-sm mb-4">MP4, AVI, MOV, WEBM — max 100 MB</p>
+                        <button id="browse-btn" class="px-5 py-2 bg-indigo-500 hover:bg-indigo-600 text-white rounded-lg font-semibold text-sm transition">
+                            📁 Browse Files
+                        </button>
+                        <input type="file" id="video-input" accept="video/*" class="hidden">
+                    </div>
+                    <div id="upload-loading" class="hidden flex-col items-center gap-3">
+                        <div class="loader mx-auto"></div>
+                        <p class="text-white/70 text-sm">Analyzing sign...</p>
+                    </div>
+                </div>
+
+                <!-- Video preview after upload -->
+                <div id="video-preview-wrap" class="hidden">
+                    <video id="video-preview" controls class="w-full rounded-xl bg-black mb-3 max-h-56"></video>
+                    <div class="flex gap-2">
+                        <button id="analyze-btn" class="flex-1 py-2 bg-green-500 hover:bg-green-600 text-white rounded-lg font-semibold text-sm transition">
+                            🔍 Analyze Sign
+                        </button>
+                        <button id="clear-btn" class="px-4 py-2 bg-red-500/70 hover:bg-red-600 text-white rounded-lg text-sm transition">
+                            �️ Clear
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Record Tab -->
+            <div id="panel-record" class="glass rounded-2xl p-6 hidden">
+                <h2 class="text-lg font-bold text-white mb-4">🎙️ Record Sign Video</h2>
+                <div class="rounded-xl overflow-hidden mb-4 bg-black" style="position:relative;">
+                    <video id="camera-feed" autoplay muted playsinline style="width:100%;border-radius:12px;max-height:320px;object-fit:cover;display:block;"></video>
+                    <canvas id="landmark-canvas" style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;border-radius:12px;"></canvas>
+                </div>
+                <div class="flex gap-2 mb-3">
+                    <button id="start-camera-btn" class="flex-1 py-2 bg-indigo-500 hover:bg-indigo-600 text-white rounded-lg font-semibold text-sm transition">
+                        📷 Start Camera
+                    </button>
+                    <button id="record-btn" class="flex-1 py-2 bg-red-500 hover:bg-red-600 text-white rounded-lg font-semibold text-sm transition hidden">
+                        ⏺️ Start Recording
+                    </button>
+                    <button id="stop-record-btn" class="flex-1 py-2 bg-yellow-500 hover:bg-yellow-600 text-white rounded-lg font-semibold text-sm transition hidden">
+                        ⏹️ Stop &amp; Analyze
+                    </button>
+                </div>
+                <p id="record-status" class="text-white/50 text-xs text-center">Camera not started</p>
+            </div>
+
+            <!-- System Status -->
+            <div class="glass rounded-2xl p-4">
+                <h3 class="text-sm font-bold text-white mb-3">🔧 System Status</h3>
+                <div class="space-y-2 text-sm">
+                    <div class="flex justify-between">
+                        <span class="text-white/60">Model:</span>
+                        <span id="model-status" class="text-yellow-400">Checking...</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-white/60">Available Signs:</span>
+                        <span id="available-signs" class="text-white/80 text-xs">Loading...</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- RIGHT PANEL: Results -->
+        <div class="glass rounded-2xl p-6">
+            <h2 class="text-lg font-bold text-white mb-4">🎯 Recognition Results</h2>
+
+            <!-- Idle state -->
+            <div id="results-idle" class="text-center text-white/50 py-16">
+                <div class="text-6xl mb-4">🤖</div>
+                <p class="font-semibold text-white/70">Ready for Sign Recognition</p>
+                <p class="text-sm mt-1">Upload or record a sign language video to begin</p>
+            </div>
+
+            <!-- Results -->
+            <div id="results-container" class="hidden result-in">
+                <div class="glass rounded-xl p-6 mb-4">
+                    <div class="flex items-center justify-between mb-4">
+                        <h3 class="font-semibold text-white">🎯 Recognized Sign</h3>
+                        <span id="demo-badge" class="hidden px-2 py-1 bg-blue-500/70 text-white text-xs rounded-full">DEMO</span>
+                    </div>
+                    <div class="text-center mb-5">
+                        <div id="recognized-text" class="text-4xl font-bold text-white mb-2">-</div>
+                        <p class="text-white/60 text-sm">Confidence: <span id="confidence-value">0%</span></p>
+                        <div class="w-full bg-white/10 rounded-full h-2 mt-2">
+                            <div id="confidence-bar" class="confidence-bar bg-indigo-400 h-2 rounded-full" style="width:0%"></div>
+                        </div>
+                    </div>
+                    <div class="flex gap-2">
+                        <button id="play-audio-btn" class="flex-1 py-2 bg-green-500 hover:bg-green-600 text-white rounded-lg text-sm font-semibold transition disabled:opacity-40" disabled>
+                            🔊 Play Audio
+                        </button>
+                        <button id="copy-text-btn" class="px-4 py-2 bg-indigo-500 hover:bg-indigo-600 text-white rounded-lg text-sm transition">
+                            � Copy
+                        </button>
+                    </div>
+                </div>
+
+                <div class="glass rounded-xl p-4 text-sm text-white/60 space-y-1">
+                    <div class="flex justify-between"><span>Processing time</span><span id="processing-time">-</span></div>
+                    <div class="flex justify-between"><span>Model</span><span id="model-info">MediaPipe + LSTM</span></div>
+                    <div class="flex justify-between"><span>Status</span><span id="recognition-status">-</span></div>
+                </div>
+            </div>
+
+            <!-- Error -->
+            <div id="results-error" class="hidden">
+                <div class="bg-red-500/20 border border-red-500/40 rounded-xl p-5 text-center">
+                    <div class="text-4xl mb-2">⚠️</div>
+                    <p class="text-white font-semibold mb-1">Recognition Failed</p>
+                    <p id="error-message" class="text-white/70 text-sm mb-4">An error occurred</p>
+                    <button id="retry-btn" class="px-4 py-2 bg-red-500 hover:bg-red-600 text-white rounded-lg text-sm transition">
+                        🔄 Try Again
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- How to use -->
+    <div class="glass rounded-2xl p-6 mt-6">
+        <h2 class="text-lg font-bold text-white mb-4">📋 How to Use</h2>
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-4 text-white/70 text-sm">
+            <div class="text-center">
+                <div class="text-3xl mb-2">1️⃣</div>
+                <p class="font-semibold text-white mb-1">Choose Mode</p>
+                <p>Upload a saved video or record live using your camera</p>
+            </div>
+            <div class="text-center">
+                <div class="text-3xl mb-2">2️⃣</div>
+                <p class="font-semibold text-white mb-1">Provide Video</p>
+                <p>Drop a file or record yourself signing</p>
+            </div>
+            <div class="text-center">
+                <div class="text-3xl mb-2">3️⃣</div>
+                <p class="font-semibold text-white mb-1">AI Analysis</p>
+                <p>MediaPipe extracts landmarks, LSTM classifies the sign</p>
+            </div>
+            <div class="text-center">
+                <div class="text-3xl mb-2">4️⃣</div>
+                <p class="font-semibold text-white mb-1">Get Results</p>
+                <p>See the recognized sign with confidence and audio</p>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<audio id="audio-player" style="display:none"></audio>
+
+<script>
+    // ── State ──────────────────────────────────────────────
+    let currentVideoFile = null;
+    let recognitionResult = null;
+    let mediaStream = null;
+    let mediaRecorder = null;
+    let recordedChunks = [];
+    let activeTab = 'upload';
+
+    // ── Elements ───────────────────────────────────────────
+    const tabUpload      = document.getElementById('tab-upload');
+    const tabRecord      = document.getElementById('tab-record');
+    const panelUpload    = document.getElementById('panel-upload');
+    const panelRecord    = document.getElementById('panel-record');
+
+    const uploadZone     = document.getElementById('upload-zone');
+    const uploadIdle     = document.getElementById('upload-idle');
+    const uploadLoading  = document.getElementById('upload-loading');
+    const browseBtn      = document.getElementById('browse-btn');
+    const videoInput     = document.getElementById('video-input');
+    const videoPreviewWrap = document.getElementById('video-preview-wrap');
+    const videoPreview   = document.getElementById('video-preview');
+    const analyzeBtn     = document.getElementById('analyze-btn');
+    const clearBtn       = document.getElementById('clear-btn');
+
+    const cameraFeed     = document.getElementById('camera-feed');
+    const startCameraBtn = document.getElementById('start-camera-btn');
+    const recordBtn      = document.getElementById('record-btn');
+    const stopRecordBtn  = document.getElementById('stop-record-btn');
+    const recordStatus   = document.getElementById('record-status');
+
+    const demoBtn        = document.getElementById('demo-btn');
+    const modelStatus    = document.getElementById('model-status');
+    const availableSigns = document.getElementById('available-signs');
+
+    const resultsIdle    = document.getElementById('results-idle');
+    const resultsContainer = document.getElementById('results-container');
+    const resultsError   = document.getElementById('results-error');
+    const recognizedText = document.getElementById('recognized-text');
+    const confidenceValue= document.getElementById('confidence-value');
+    const confidenceBar  = document.getElementById('confidence-bar');
+    const playAudioBtn   = document.getElementById('play-audio-btn');
+    const copyTextBtn    = document.getElementById('copy-text-btn');
+    const demoBadge      = document.getElementById('demo-badge');
+    const audioPlayer    = document.getElementById('audio-player');
+    const retryBtn       = document.getElementById('retry-btn');
+
+    // ── Tab switching ──────────────────────────────────────
+    function switchTab(tab) {
+        activeTab = tab;
+        tabUpload.classList.toggle('active', tab === 'upload');
+        tabRecord.classList.toggle('active', tab === 'record');
+        panelUpload.classList.toggle('hidden', tab !== 'upload');
+        panelRecord.classList.toggle('hidden', tab !== 'record');
+        if (tab !== 'record' && mediaStream) stopCamera();
+    }
+    tabUpload.addEventListener('click', () => switchTab('upload'));
+    tabRecord.addEventListener('click', () => switchTab('record'));
+
+    // ── Upload logic ───────────────────────────────────────
+    uploadZone.addEventListener('click', () => videoInput.click());
+    uploadZone.addEventListener('dragover', e => { e.preventDefault(); uploadZone.classList.add('dragover'); });
+    uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('dragover'));
+    uploadZone.addEventListener('drop', e => {
+        e.preventDefault(); uploadZone.classList.remove('dragover');
+        if (e.dataTransfer.files[0]) loadFile(e.dataTransfer.files[0]);
+    });
+    browseBtn.addEventListener('click', e => { e.stopPropagation(); videoInput.click(); });
+    videoInput.addEventListener('change', e => { if (e.target.files[0]) loadFile(e.target.files[0]); });
+
+    function loadFile(file) {
+        const ok = ['video/mp4','video/avi','video/mov','video/webm','video/quicktime'];
+        if (!ok.includes(file.type) && !file.name.match(/\.(mp4|avi|mov|webm)$/i)) {
+            alert('Please upload a valid video file (MP4, AVI, MOV, WEBM)'); return;
+        }
+        if (file.size > 100 * 1024 * 1024) { alert('File must be under 100 MB'); return; }
+        currentVideoFile = file;
+        videoPreview.src = URL.createObjectURL(file);
+        videoPreviewWrap.classList.remove('hidden');
+        resetResults();
+    }
+
+    analyzeBtn.addEventListener('click', analyzeVideo);
+    clearBtn.addEventListener('click', () => {
+        currentVideoFile = null;
+        videoPreview.src = '';
+        videoPreviewWrap.classList.add('hidden');
+        videoInput.value = '';
+        resetResults();
+    });
+
+    // ── Camera / Record logic ──────────────────────────────
+    startCameraBtn.addEventListener('click', startCamera);
+    recordBtn.addEventListener('click', startRecording);
+    stopRecordBtn.addEventListener('click', stopRecording);
+
+    async function startCamera() {
+        try {
+            mediaStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+            cameraFeed.srcObject = mediaStream;
+            startCameraBtn.classList.add('hidden');
+            recordBtn.classList.remove('hidden');
+            recordStatus.textContent = 'Camera ready — press Start Recording';
+            startLandmarkDrawing();
+        } catch (err) {
+            recordStatus.textContent = 'Camera access denied: ' + err.message;
+        }
+    }
+
+    // ── MediaPipe landmark overlay ─────────────────────────
+    let holisticInstance = null;
+    let mpCamera = null;
+
+    function startLandmarkDrawing() {
+        const canvas = document.getElementById('landmark-canvas');
+        const ctx = canvas.getContext('2d');
+
+        holisticInstance = new Holistic({
+            locateFile: f => `https://cdn.jsdelivr.net/npm/@mediapipe/holistic/${f}`
+        });
+        holisticInstance.setOptions({
+            modelComplexity: 1,
+            smoothLandmarks: true,
+            enableSegmentation: false,
+            refineFaceLandmarks: false,
+            minDetectionConfidence: 0.5,
+            minTrackingConfidence: 0.5,
+        });
+        holisticInstance.onResults(results => {
+            canvas.width  = cameraFeed.videoWidth  || cameraFeed.clientWidth;
+            canvas.height = cameraFeed.videoHeight || cameraFeed.clientHeight;
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            if (results.poseLandmarks) {
+                drawConnectors(ctx, results.poseLandmarks, POSE_CONNECTIONS,
+                    { color: '#00d4ff', lineWidth: 2 });
+                drawLandmarks(ctx, results.poseLandmarks,
+                    { color: '#fff', fillColor: '#00d4ff', lineWidth: 1, radius: 3 });
+            }
+            if (results.leftHandLandmarks) {
+                drawConnectors(ctx, results.leftHandLandmarks, HAND_CONNECTIONS,
+                    { color: '#00e676', lineWidth: 2 });
+                drawLandmarks(ctx, results.leftHandLandmarks,
+                    { color: '#fff', fillColor: '#00e676', lineWidth: 1, radius: 4 });
+            }
+            if (results.rightHandLandmarks) {
+                drawConnectors(ctx, results.rightHandLandmarks, HAND_CONNECTIONS,
+                    { color: '#ff6d00', lineWidth: 2 });
+                drawLandmarks(ctx, results.rightHandLandmarks,
+                    { color: '#fff', fillColor: '#ff6d00', lineWidth: 1, radius: 4 });
+            }
+        });
+
+        mpCamera = new Camera(cameraFeed, {
+            onFrame: async () => { await holisticInstance.send({ image: cameraFeed }); },
+            width: 640, height: 480,
+        });
+        mpCamera.start();
+    }
+
+    function stopLandmarkDrawing() {
+        if (mpCamera) { mpCamera.stop(); mpCamera = null; }
+        if (holisticInstance) { holisticInstance.close(); holisticInstance = null; }
+        const canvas = document.getElementById('landmark-canvas');
+        if (canvas) canvas.getContext('2d').clearRect(0, 0, canvas.width, canvas.height);
+    }
+
+    function startRecording() {
+        recordedChunks = [];
+        const options = MediaRecorder.isTypeSupported('video/webm;codecs=vp9')
+            ? { mimeType: 'video/webm;codecs=vp9' }
+            : { mimeType: 'video/webm' };
+        mediaRecorder = new MediaRecorder(mediaStream, options);
+        mediaRecorder.ondataavailable = e => { if (e.data.size > 0) recordedChunks.push(e.data); };
+        mediaRecorder.onstop = handleRecordingStop;
+        mediaRecorder.start(100);
+        recordBtn.classList.add('hidden');
+        stopRecordBtn.classList.remove('hidden');
+        recordStatus.textContent = '⏺️ Recording... press Stop to analyze';
+        recordStatus.classList.add('text-red-400');
+    }
+
+    function stopRecording() {
+        if (mediaRecorder && mediaRecorder.state !== 'inactive') mediaRecorder.stop();
+        stopRecordBtn.classList.add('hidden');
+        recordStatus.textContent = 'Processing recording...';
+        recordStatus.classList.remove('text-red-400');
+    }
+
+    function handleRecordingStop() {
+        const blob = new Blob(recordedChunks, { type: 'video/webm' });
+        currentVideoFile = new File([blob], 'recorded_sign.webm', { type: 'video/webm' });
+        recordStatus.textContent = 'Recording ready — analyzing...';
+        analyzeVideo();
+    }
+
+    function stopCamera() {
+        stopLandmarkDrawing();
+        if (mediaStream) { mediaStream.getTracks().forEach(t => t.stop()); mediaStream = null; }
+        cameraFeed.srcObject = null;
+        startCameraBtn.classList.remove('hidden');
+        recordBtn.classList.add('hidden');
+        stopRecordBtn.classList.add('hidden');
+        recordStatus.textContent = 'Camera not started';
+    }
+
+    // ── Analyze ────────────────────────────────────────────
+    async function analyzeVideo() {
+        if (!currentVideoFile) { alert('No video to analyze'); return; }
+        showLoading(true);
+        const t0 = Date.now();
+        try {
+            const fd = new FormData();
+            fd.append('video', currentVideoFile);
+            const res = await fetch('/upload-sign-video', { method: 'POST', body: fd });
+            const data = await res.json();
+            const elapsed = ((Date.now() - t0) / 1000).toFixed(1);
+            if (data.success) showResults(data, elapsed);
+            else showError(data.error || 'Recognition failed');
+        } catch (err) {
+            showError('Network error: ' + err.message);
+        } finally {
+            showLoading(false);
+        }
+    }
+
+    // ── Demo ───────────────────────────────────────────────
+    demoBtn.addEventListener('click', () => {
+        const c = document.createElement('canvas');
+        c.width = 1; c.height = 1;
+        c.getContext('2d').fillRect(0, 0, 1, 1);
+        c.toBlob(blob => {
+            currentVideoFile = new File([blob], 'demo.webm', { type: 'video/webm' });
+            switchTab('upload');
+            videoPreview.src = URL.createObjectURL(currentVideoFile);
+            videoPreviewWrap.classList.remove('hidden');
+            setTimeout(analyzeVideo, 300);
+        }, 'video/webm');
+    });
+
+    retryBtn.addEventListener('click', analyzeVideo);
+
+    // ── UI helpers ─────────────────────────────────────────
+    function showLoading(on) {
+        uploadIdle.classList.toggle('hidden', on);
+        uploadLoading.classList.toggle('hidden', !on);
+        uploadLoading.classList.toggle('flex', on);
+    }
+
+    function showResults(data, elapsed) {
+        recognitionResult = data;
+        recognizedText.textContent = data.recognized_text;
+        const pct = (data.confidence * 100).toFixed(1);
+        confidenceValue.textContent = pct + '%';
+        confidenceBar.style.width = pct + '%';
+        demoBadge.classList.toggle('hidden', !data.is_demo);
+        if (data.audio_url) { playAudioBtn.disabled = false; audioPlayer.src = data.audio_url; }
+        else { playAudioBtn.disabled = true; }
+        document.getElementById('processing-time').textContent = elapsed + 's';
+        document.getElementById('recognition-status').textContent = data.is_demo ? 'Demo Mode' : 'Complete';
+        resultsIdle.classList.add('hidden');
+        resultsError.classList.add('hidden');
+        resultsContainer.classList.remove('hidden');
+        resultsContainer.classList.add('result-in');
+    }
+
+    function showError(msg) {
+        document.getElementById('error-message').textContent = msg;
+        resultsIdle.classList.add('hidden');
+        resultsContainer.classList.add('hidden');
+        resultsError.classList.remove('hidden');
+    }
+
+    function resetResults() {
+        resultsContainer.classList.add('hidden');
+        resultsError.classList.add('hidden');
+        resultsIdle.classList.remove('hidden');
+    }
+
+    playAudioBtn.addEventListener('click', () => audioPlayer.play());
+    copyTextBtn.addEventListener('click', () => {
+        if (recognitionResult) {
+            navigator.clipboard.writeText(recognitionResult.recognized_text).then(() => {
+                const orig = copyTextBtn.textContent;
+                copyTextBtn.textContent = '✅ Copied!';
+                setTimeout(() => copyTextBtn.textContent = orig, 2000);
+            });
+        }
+    });
+
+    // ── System status ──────────────────────────────────────
+    async function checkStatus() {
+        try {
+            const res = await fetch('/api/sign-recognition-status');
+            const s = await res.json();
+            if (s.model_loaded) {
+                modelStatus.textContent = `✅ INCLUDE (${s.n_classes || 263} classes)`;
+                modelStatus.className = 'text-green-400';
+            } else {
+                modelStatus.textContent = '❌ Not loaded';
+                modelStatus.className = 'text-red-400';
+            }
+            availableSigns.textContent = s.available_signs && s.available_signs.length
+                ? s.available_signs.slice(0, 8).join(', ') + (s.available_signs.length > 8 ? ` +${s.available_signs.length - 8} more` : '')
+                : 'No signs available';
+        } catch {
+            modelStatus.textContent = '❌ Error';
+            modelStatus.className = 'text-red-400';
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', checkStatus);
+</script>
+</body>
+</html>

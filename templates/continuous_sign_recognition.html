@@ -1,0 +1,716 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Continuous Sign Recognition – ISL Translator</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        * { font-family: 'Inter', sans-serif; }
+
+        body {
+            background: #0F172A;
+            min-height: 100vh;
+            color: #F8FAFC;
+        }
+
+        /* ── webcam ───────────────────────────── */
+        .cam-wrapper {
+            position: relative;
+            border-radius: 16px;
+            overflow: hidden;
+            background: #000;
+            aspect-ratio: 4/3;
+        }
+        .cam-wrapper video {
+            width: 100%; height: 100%;
+            object-fit: cover;
+        }
+        .cam-ring {
+            position: absolute; inset: 0;
+            border: 4px solid transparent;
+            border-radius: 16px;
+            pointer-events: none;
+            transition: border-color .3s, box-shadow .3s;
+        }
+        .cam-ring.idle   { border-color: #334155; }
+        .cam-ring.signing {
+            border-color: #22C55E;
+            box-shadow: 0 0 24px rgba(34,197,94,.45);
+            animation: ringPulse 1.2s infinite;
+        }
+        .cam-ring.processing {
+            border-color: #F59E0B;
+            box-shadow: 0 0 24px rgba(245,158,11,.35);
+        }
+        @keyframes ringPulse {
+            0%,100% { box-shadow: 0 0 24px rgba(34,197,94,.45); }
+            50%     { box-shadow: 0 0 40px rgba(34,197,94,.7); }
+        }
+
+        /* ── badges over webcam ───────────────── */
+        .cam-badge {
+            position: absolute; top: 12px;
+            padding: 6px 14px; border-radius: 999px;
+            font-size: 13px; font-weight: 600;
+            backdrop-filter: blur(6px);
+        }
+        .badge-state { left: 12px;  background: rgba(15,23,42,.7); }
+        .badge-motion{ right: 12px; background: rgba(15,23,42,.7); }
+
+        /* ── sentence builder ─────────────────── */
+        .sentence-area {
+            min-height: 100px;
+            background: #1E293B;
+            border: 1px solid #334155;
+            border-radius: 12px;
+            padding: 20px 24px;
+            font-size: 1.6rem;
+            font-weight: 700;
+            line-height: 2.2;
+            word-spacing: .25em;
+        }
+        .sentence-area .word {
+            display: inline-block;
+            animation: wordPop .4s cubic-bezier(.16,1.11,.36,1.32);
+            background: #334155;
+            padding: 2px 14px;
+            border-radius: 8px;
+            margin: 3px 4px;
+            position: relative;
+        }
+        .sentence-area .word .conf {
+            position: absolute; top: -8px; right: -6px;
+            font-size: 10px; font-weight: 600;
+            background: #22C55E; color: #fff;
+            padding: 1px 5px; border-radius: 6px;
+        }
+        .sentence-area .word .conf.low  { background: #F59E0B; }
+        .sentence-area .word .conf.vlow { background: #EF4444; }
+        @keyframes wordPop {
+            0%   { opacity: 0; transform: scale(.6) translateY(8px); }
+            100% { opacity: 1; transform: scale(1)  translateY(0); }
+        }
+
+        /* ── motion bar ──────────────────────── */
+        .motion-track {
+            height: 6px; border-radius: 999px;
+            background: #1E293B; overflow: hidden;
+        }
+        .motion-bar {
+            height: 100%; border-radius: 999px;
+            background: linear-gradient(90deg, #22C55E, #F59E0B, #EF4444);
+            transition: width .15s;
+        }
+
+        /* ── control buttons ─────────────────── */
+        .btn {
+            padding: 10px 20px; border-radius: 10px;
+            font-weight: 600; font-size: 14px;
+            transition: all .2s;
+            cursor: pointer; border: none;
+        }
+        .btn:active { transform: scale(.96); }
+        .btn-green  { background: #22C55E; color: #fff; }
+        .btn-green:hover { background: #16A34A; }
+        .btn-red    { background: #EF4444; color: #fff; }
+        .btn-red:hover { background: #DC2626; }
+        .btn-blue   { background: #3B82F6; color: #fff; }
+        .btn-blue:hover { background: #2563EB; }
+        .btn-amber  { background: #F59E0B; color: #fff; }
+        .btn-amber:hover{ background: #D97706; }
+        .btn-slate  { background: #334155; color: #CBD5E1; }
+        .btn-slate:hover{ background: #475569; }
+
+        /* ── timeline ────────────────────────── */
+        .tl-item {
+            animation: slideUp .35s ease-out;
+        }
+        @keyframes slideUp {
+            from { opacity:0; transform:translateY(12px); }
+            to   { opacity:1; transform:translateY(0); }
+        }
+
+        /* ── misc ────────────────────────────── */
+        .glass { background: rgba(30,41,59,.6); border: 1px solid #334155; }
+        .dot { width:10px; height:10px; border-radius:50%; display:inline-block; }
+        .dot-green { background:#22C55E; }
+        .dot-amber { background:#F59E0B; animation: blink 1s infinite; }
+        .dot-red   { background:#EF4444; }
+        @keyframes blink { 50%{opacity:.4;} }
+
+        .cursor-blink::after {
+            content:'|'; animation: cursorBlink .9s step-end infinite;
+            color: #22C55E; margin-left: 2px;
+        }
+        @keyframes cursorBlink { 50%{opacity:0;} }
+    </style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════════════════
+     HEADER
+     ═══════════════════════════════════════════════════════ -->
+<header class="border-b border-slate-800">
+    <div class="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
+        <div>
+            <h1 class="text-xl font-bold tracking-tight">
+                ✋ Continuous Sign Recognition
+                <span class="ml-2 text-xs font-medium bg-emerald-500/20 text-emerald-400 px-2 py-0.5 rounded-full">
+                    SignGemma-style
+                </span>
+            </h1>
+            <p class="text-slate-400 text-sm mt-0.5">
+                Sign continuously — the system detects boundaries &amp; builds a sentence in real time
+            </p>
+        </div>
+        <nav class="flex gap-2 text-sm">
+            <a href="/" class="btn btn-slate">🔤 Text→Sign</a>
+            <a href="/live-sign-recognition" class="btn btn-slate">📷 Single Shot</a>
+            <a href="/sign-recognition" class="btn btn-slate">📤 Upload</a>
+        </nav>
+    </div>
+</header>
+
+<!-- ═══════════════════════════════════════════════════════
+     MAIN GRID
+     ═══════════════════════════════════════════════════════ -->
+<main class="max-w-7xl mx-auto px-4 py-6 grid lg:grid-cols-5 gap-6">
+
+    <!-- LEFT COL — webcam + controls (3/5) -->
+    <section class="lg:col-span-3 space-y-5">
+
+        <!-- webcam -->
+        <div class="cam-wrapper" id="camWrapper">
+            <video id="webcam" autoplay muted playsinline></video>
+            <div id="camRing" class="cam-ring idle"></div>
+
+            <!-- state badge -->
+            <div class="cam-badge badge-state" id="stateBadge">
+                <span class="dot dot-green mr-1"></span> Idle
+            </div>
+            <!-- motion badge -->
+            <div class="cam-badge badge-motion" id="motionBadge">
+                Motion: <span id="motionPct">0</span>%
+            </div>
+
+            <!-- placeholder -->
+            <div id="camPlaceholder" class="absolute inset-0 flex flex-col items-center justify-center bg-slate-900 text-center p-8">
+                <div class="text-6xl mb-3">✋</div>
+                <p class="text-lg font-semibold mb-1">Camera Required</p>
+                <p class="text-slate-400 text-sm mb-5">Allow camera access to start continuous recognition</p>
+                <button id="btnStartCam" class="btn btn-green text-base px-8">🎥 Start Camera</button>
+            </div>
+        </div>
+
+        <!-- motion bar -->
+        <div class="flex items-center gap-3">
+            <span class="text-xs text-slate-500 w-14">Motion</span>
+            <div class="motion-track flex-1">
+                <div id="motionBar" class="motion-bar" style="width:0%"></div>
+            </div>
+        </div>
+
+        <!-- controls -->
+        <div class="flex flex-wrap gap-3">
+            <button id="btnStart" class="btn btn-green flex-1" disabled>▶ Start Recognition</button>
+            <button id="btnStop"  class="btn btn-red   flex-1 hidden" disabled>■ Stop</button>
+            <button id="btnUndo"  class="btn btn-amber" disabled>↩ Undo</button>
+            <button id="btnReset" class="btn btn-slate" disabled>🗑 Clear</button>
+        </div>
+
+        <!-- settings row -->
+        <details class="glass rounded-xl p-4">
+            <summary class="cursor-pointer font-semibold text-sm text-slate-300">⚙️ Settings</summary>
+            <div class="grid grid-cols-3 gap-4 mt-4 text-sm">
+                <label class="space-y-1">
+                    <span class="text-slate-400">Confidence threshold</span>
+                    <input id="cfgConfThreshold" type="range" min="0.2" max="0.9" step="0.05" value="0.45"
+                           class="w-full accent-emerald-500">
+                    <span class="text-slate-500" id="cfgConfVal">0.45</span>
+                </label>
+                <label class="space-y-1">
+                    <span class="text-slate-400">Motion sensitivity</span>
+                    <input id="cfgMotionThreshold" type="range" min="1" max="15" step="0.5" value="5"
+                           class="w-full accent-emerald-500">
+                    <span class="text-slate-500" id="cfgMotionVal">5</span>
+                </label>
+                <label class="space-y-1">
+                    <span class="text-slate-400">Idle timeout (s)</span>
+                    <input id="cfgIdleTimeout" type="range" min="0.5" max="4" step="0.25" value="1.5"
+                           class="w-full accent-emerald-500">
+                    <span class="text-slate-500" id="cfgIdleVal">1.5s</span>
+                </label>
+            </div>
+        </details>
+
+        <!-- instructions -->
+        <div class="glass rounded-xl p-4 text-sm text-slate-400 space-y-1">
+            <p class="text-slate-200 font-semibold mb-1">📋 How it works</p>
+            <p>1. Click <b class="text-emerald-400">Start Recognition</b> — the system watches your webcam.</p>
+            <p>2. Perform a sign — the green border lights up when motion is detected.</p>
+            <p>3. Pause briefly — the system treats the pause as a sign boundary.</p>
+            <p>4. The recognized sign appears in the sentence builder above.</p>
+            <p>5. Keep signing — each new sign is appended to build a full sentence.</p>
+            <p>6. Click <b class="text-blue-400">🔊 Speak</b> to hear the assembled sentence.</p>
+        </div>
+    </section>
+
+    <!-- RIGHT COL — sentence + timeline (2/5) -->
+    <section class="lg:col-span-2 space-y-5">
+
+        <!-- sentence builder -->
+        <div>
+            <div class="flex items-center justify-between mb-2">
+                <h2 class="font-bold text-lg">📝 Sentence</h2>
+                <button id="btnSpeak" class="btn btn-blue text-xs" disabled>🔊 Speak Sentence</button>
+            </div>
+            <div id="sentenceArea" class="sentence-area cursor-blink">
+                <span class="text-slate-600 text-base font-normal">Signs will appear here…</span>
+            </div>
+        </div>
+
+        <!-- latest recognition -->
+        <div class="glass rounded-xl p-4">
+            <h3 class="font-semibold text-sm text-slate-300 mb-3">🎯 Latest Recognition</h3>
+            <div id="latestResult" class="text-center py-4 text-slate-600 text-sm">
+                Waiting for first sign…
+            </div>
+        </div>
+
+        <!-- stats -->
+        <div class="grid grid-cols-3 gap-3 text-center text-sm">
+            <div class="glass rounded-xl p-3">
+                <div class="text-2xl font-bold text-emerald-400" id="statSigns">0</div>
+                <div class="text-slate-500">Signs</div>
+            </div>
+            <div class="glass rounded-xl p-3">
+                <div class="text-2xl font-bold text-blue-400" id="statConf">–</div>
+                <div class="text-slate-500">Avg Conf</div>
+            </div>
+            <div class="glass rounded-xl p-3">
+                <div class="text-2xl font-bold text-amber-400" id="statTime">0s</div>
+                <div class="text-slate-500">Elapsed</div>
+            </div>
+        </div>
+
+        <!-- sign timeline -->
+        <div>
+            <div class="flex items-center justify-between mb-2">
+                <h3 class="font-semibold text-sm text-slate-300">📜 Sign Timeline</h3>
+                <span class="text-xs text-slate-600" id="tlCount">0 signs</span>
+            </div>
+            <div id="timeline" class="space-y-2 max-h-72 overflow-y-auto pr-1">
+                <div class="text-center text-slate-700 text-xs py-6">No signs yet</div>
+            </div>
+        </div>
+
+    </section>
+</main>
+
+<audio id="ttsAudio" style="display:none"></audio>
+<canvas id="diffCanvas" style="display:none"></canvas>
+
+<!-- ═══════════════════════════════════════════════════════
+     JAVASCRIPT
+     ═══════════════════════════════════════════════════════ -->
+<script>
+/* ── CONFIG ──────────────────────────────────────────── */
+let MOTION_THRESHOLD = 5;     // 0-100
+let IDLE_TIMEOUT_S   = 1.5;   // seconds of low motion → sign boundary
+let CONF_THRESHOLD   = 0.45;
+const DETECT_FPS     = 10;    // motion detection framerate
+const SEGMENT_MAX_S  = 5;     // max recording length per sign
+
+/* ── STATE ───────────────────────────────────────────── */
+let sessionId   = null;
+let stream      = null;
+let isRunning   = false;
+let signingActive = false;
+let idleFrames  = 0;
+let motionLevel = 0;
+let prevGray    = null;
+let mediaRecorder = null;
+let recordedChunks = [];
+let rafId = null;
+let timerElapsed = null;
+let startedAt = 0;
+let segTimeout = null;
+
+/* ── DOM ─────────────────────────────────────────────── */
+const webcam        = document.getElementById('webcam');
+const camRing       = document.getElementById('camRing');
+const camPlaceholder= document.getElementById('camPlaceholder');
+const stateBadge    = document.getElementById('stateBadge');
+const motionBadge   = document.getElementById('motionBadge');
+const motionPct     = document.getElementById('motionPct');
+const motionBar     = document.getElementById('motionBar');
+const btnStartCam   = document.getElementById('btnStartCam');
+const btnStart      = document.getElementById('btnStart');
+const btnStop       = document.getElementById('btnStop');
+const btnUndo       = document.getElementById('btnUndo');
+const btnReset      = document.getElementById('btnReset');
+const btnSpeak      = document.getElementById('btnSpeak');
+const sentenceArea  = document.getElementById('sentenceArea');
+const latestResult  = document.getElementById('latestResult');
+const statSigns     = document.getElementById('statSigns');
+const statConf      = document.getElementById('statConf');
+const statTime      = document.getElementById('statTime');
+const timeline      = document.getElementById('timeline');
+const tlCount       = document.getElementById('tlCount');
+const ttsAudio      = document.getElementById('ttsAudio');
+const diffCanvas    = document.getElementById('diffCanvas');
+const diffCtx       = diffCanvas.getContext('2d', { willReadFrequently: true });
+
+/* settings */
+const cfgConf   = document.getElementById('cfgConfThreshold');
+const cfgMotion = document.getElementById('cfgMotionThreshold');
+const cfgIdle   = document.getElementById('cfgIdleTimeout');
+cfgConf.oninput   = () => { CONF_THRESHOLD   = +cfgConf.value;   document.getElementById('cfgConfVal').textContent   = cfgConf.value; };
+cfgMotion.oninput = () => { MOTION_THRESHOLD = +cfgMotion.value; document.getElementById('cfgMotionVal').textContent = cfgMotion.value; };
+cfgIdle.oninput   = () => { IDLE_TIMEOUT_S   = +cfgIdle.value;  document.getElementById('cfgIdleVal').textContent   = cfgIdle.value + 's'; };
+
+/* ── CAMERA ──────────────────────────────────────────── */
+btnStartCam.onclick = startCamera;
+
+async function startCamera() {
+    try {
+        stream = await navigator.mediaDevices.getUserMedia({
+            video: { width:{ideal:640}, height:{ideal:480}, frameRate:{ideal:30} },
+            audio: false
+        });
+        webcam.srcObject = stream;
+        camPlaceholder.style.display = 'none';
+        btnStart.disabled = false;
+    } catch(e) {
+        alert('Camera access denied: ' + e.message);
+    }
+}
+
+/* ── START / STOP ────────────────────────────────────── */
+btnStart.onclick = startRecognition;
+btnStop.onclick  = stopRecognition;
+btnUndo.onclick  = undoLast;
+btnReset.onclick = resetSession;
+btnSpeak.onclick = speakSentence;
+
+async function startRecognition() {
+    /* create server session */
+    const res = await fetch('/api/continuous/start', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({
+            confidence_threshold: CONF_THRESHOLD,
+            dedup_window: 3,
+            cooldown: 0.8
+        })
+    });
+    const data = await res.json();
+    sessionId = data.session_id;
+
+    isRunning = true;
+    startedAt = Date.now();
+    btnStart.classList.add('hidden');
+    btnStop.classList.remove('hidden');
+    btnStop.disabled = false;
+    btnUndo.disabled = false;
+    btnReset.disabled = false;
+    btnSpeak.disabled = false;
+
+    sentenceArea.innerHTML = '';
+    sentenceArea.classList.add('cursor-blink');
+    updateTimeline([]);
+
+    prevGray = null;
+    idleFrames = 0;
+    signingActive = false;
+
+    /* start motion detection loop */
+    detectLoop();
+
+    /* elapsed timer */
+    timerElapsed = setInterval(() => {
+        statTime.textContent = ((Date.now()-startedAt)/1000|0) + 's';
+    }, 1000);
+}
+
+async function stopRecognition() {
+    isRunning = false;
+    signingActive = false;
+    stopSegmentRecording();
+    cancelAnimationFrame(rafId);
+    clearInterval(timerElapsed);
+
+    camRing.className = 'cam-ring idle';
+    setStateBadge('idle');
+
+    btnStop.classList.add('hidden');
+    btnStart.classList.remove('hidden');
+    btnStart.disabled = false;
+
+    /* end session */
+    if (sessionId) {
+        await fetch('/api/continuous/stop', {
+            method: 'POST',
+            headers: {'Content-Type':'application/json'},
+            body: JSON.stringify({ session_id: sessionId })
+        });
+        sessionId = null;
+    }
+}
+
+/* ── MOTION DETECTION LOOP ───────────────────────────── */
+let lastDetectTime = 0;
+
+function detectLoop() {
+    if (!isRunning) return;
+    rafId = requestAnimationFrame(detectLoop);
+
+    const now = performance.now();
+    if (now - lastDetectTime < 1000/DETECT_FPS) return;
+    lastDetectTime = now;
+
+    /* grab frame to hidden canvas */
+    diffCanvas.width  = 160;   // low-res for speed
+    diffCanvas.height = 120;
+    diffCtx.drawImage(webcam, 0, 0, 160, 120);
+    const imgData = diffCtx.getImageData(0, 0, 160, 120);
+
+    /* convert to grayscale */
+    const gray = new Float32Array(160*120);
+    for (let i=0; i<gray.length; i++) {
+        const p = i*4;
+        gray[i] = imgData.data[p]*0.299 + imgData.data[p+1]*0.587 + imgData.data[p+2]*0.114;
+    }
+
+    if (prevGray) {
+        let diff = 0;
+        for (let i=0; i<gray.length; i++) diff += Math.abs(gray[i]-prevGray[i]);
+        motionLevel = (diff / gray.length) / 2.55;  // normalize 0-100
+    }
+    prevGray = gray;
+
+    /* update UI */
+    const ml = Math.min(100, motionLevel);
+    motionPct.textContent = ml.toFixed(0);
+    motionBar.style.width = ml + '%';
+
+    /* state machine */
+    if (motionLevel > MOTION_THRESHOLD) {
+        idleFrames = 0;
+        if (!signingActive) {
+            signingActive = true;
+            camRing.className = 'cam-ring signing';
+            setStateBadge('signing');
+            startSegmentRecording();
+        }
+    } else {
+        idleFrames++;
+        const idleNeeded = IDLE_TIMEOUT_S * DETECT_FPS;
+        if (signingActive && idleFrames >= idleNeeded) {
+            /* sign boundary detected */
+            signingActive = false;
+            camRing.className = 'cam-ring processing';
+            setStateBadge('processing');
+            stopSegmentRecording();  // triggers send
+        }
+    }
+}
+
+/* ── SEGMENT RECORDING ───────────────────────────────── */
+function startSegmentRecording() {
+    if (mediaRecorder && mediaRecorder.state !== 'inactive') return;
+    recordedChunks = [];
+
+    try {
+        mediaRecorder = new MediaRecorder(stream, { mimeType: 'video/webm;codecs=vp8' });
+    } catch(e) {
+        mediaRecorder = new MediaRecorder(stream);
+    }
+
+    mediaRecorder.ondataavailable = e => { if (e.data.size>0) recordedChunks.push(e.data); };
+    mediaRecorder.onstop = () => sendSegment();
+    mediaRecorder.start();
+
+    /* max-length safety */
+    segTimeout = setTimeout(() => {
+        if (mediaRecorder && mediaRecorder.state === 'recording') {
+            signingActive = false;
+            camRing.className = 'cam-ring processing';
+            setStateBadge('processing');
+            stopSegmentRecording();
+        }
+    }, SEGMENT_MAX_S * 1000);
+}
+
+function stopSegmentRecording() {
+    clearTimeout(segTimeout);
+    if (mediaRecorder && mediaRecorder.state === 'recording') {
+        mediaRecorder.stop();
+    }
+}
+
+async function sendSegment() {
+    if (!sessionId || recordedChunks.length === 0) {
+        camRing.className = 'cam-ring idle';
+        setStateBadge('idle');
+        return;
+    }
+
+    const blob = new Blob(recordedChunks, { type: 'video/webm' });
+    const formData = new FormData();
+    formData.append('video', blob, 'segment.webm');
+    formData.append('session_id', sessionId);
+
+    try {
+        const res = await fetch('/api/continuous/segment', { method:'POST', body:formData });
+        const data = await res.json();
+        handleServerResult(data);
+    } catch(e) {
+        console.error('Segment send failed', e);
+    }
+
+    camRing.className = isRunning ? 'cam-ring idle' : 'cam-ring idle';
+    setStateBadge('idle');
+}
+
+/* ── SERVER RESULT HANDLER ───────────────────────────── */
+function handleServerResult(data) {
+    if (data.error) { console.warn(data.error); return; }
+
+    /* update sentence */
+    renderSentence(data.tokens || []);
+
+    /* update stats */
+    const tokens = data.tokens || [];
+    statSigns.textContent = tokens.length;
+    if (tokens.length) {
+        const avg = tokens.reduce((s,t)=>s+t.confidence, 0) / tokens.length;
+        statConf.textContent = (avg*100).toFixed(0) + '%';
+    }
+
+    /* update timeline */
+    updateTimeline(tokens);
+
+    /* update latest */
+    if (data.action === 'added') {
+        latestResult.innerHTML = `
+            <div class="text-4xl mb-1">✅</div>
+            <div class="text-2xl font-bold text-white">${data.sign}</div>
+            <div class="text-sm text-slate-400 mt-1">${(data.confidence*100).toFixed(1)}% confidence</div>
+        `;
+    } else if (data.action === 'filtered') {
+        latestResult.innerHTML = `
+            <div class="text-3xl mb-1">⚠️</div>
+            <div class="text-sm text-amber-400">Low confidence — filtered</div>
+            <div class="text-xs text-slate-500 mt-1">${data.reason||''}</div>
+        `;
+    } else if (data.action === 'duplicate') {
+        latestResult.innerHTML = `
+            <div class="text-3xl mb-1">🔁</div>
+            <div class="text-sm text-slate-400">Duplicate — skipped</div>
+            <div class="text-xs text-slate-500 mt-1">${data.reason||''}</div>
+        `;
+    } else if (data.action === 'cooldown') {
+        latestResult.innerHTML = `
+            <div class="text-3xl mb-1">⏳</div>
+            <div class="text-sm text-slate-400">Cooldown — too fast</div>
+        `;
+    }
+}
+
+/* ── RENDER SENTENCE ─────────────────────────────────── */
+function renderSentence(tokens) {
+    if (!tokens.length) {
+        sentenceArea.innerHTML = '<span class="text-slate-600 text-base font-normal">Signs will appear here…</span>';
+        sentenceArea.classList.add('cursor-blink');
+        return;
+    }
+    sentenceArea.classList.add('cursor-blink');
+    sentenceArea.innerHTML = tokens.map(t => {
+        const confCls = t.confidence >= 0.75 ? '' : t.confidence >= 0.55 ? 'low' : 'vlow';
+        return `<span class="word">${t.sign}<span class="conf ${confCls}">${(t.confidence*100).toFixed(0)}%</span></span>`;
+    }).join(' ');
+}
+
+/* ── TIMELINE ────────────────────────────────────────── */
+function updateTimeline(tokens) {
+    tlCount.textContent = tokens.length + ' sign' + (tokens.length!==1?'s':'');
+    if (!tokens.length) {
+        timeline.innerHTML = '<div class="text-center text-slate-700 text-xs py-6">No signs yet</div>';
+        return;
+    }
+    timeline.innerHTML = tokens.map((t,i) => `
+        <div class="tl-item glass rounded-lg p-3 flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <span class="text-xs text-slate-600 w-5 text-right">${i+1}</span>
+                <span class="font-semibold text-white">${t.sign}</span>
+            </div>
+            <div class="flex items-center gap-4 text-xs text-slate-400">
+                <span>${(t.confidence*100).toFixed(1)}%</span>
+                <span>${t.timestamp.toFixed(1)}s</span>
+            </div>
+        </div>
+    `).join('');
+    timeline.scrollTop = timeline.scrollHeight;
+}
+
+/* ── UNDO / RESET / SPEAK ────────────────────────────── */
+async function undoLast() {
+    if (!sessionId) return;
+    const res = await fetch('/api/continuous/undo', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ session_id: sessionId })
+    });
+    handleServerResult(await res.json());
+}
+
+async function resetSession() {
+    if (!sessionId) return;
+    const res = await fetch('/api/continuous/reset', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ session_id: sessionId })
+    });
+    handleServerResult(await res.json());
+    latestResult.innerHTML = '<span class="text-slate-600 text-sm">Waiting for first sign…</span>';
+    statSigns.textContent = '0';
+    statConf.textContent = '–';
+}
+
+async function speakSentence() {
+    if (!sessionId) return;
+    const res = await fetch('/api/continuous/speak', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ session_id: sessionId })
+    });
+    const data = await res.json();
+    if (data.audio_url) {
+        ttsAudio.src = data.audio_url;
+        ttsAudio.play();
+    }
+}
+
+/* ── HELPERS ─────────────────────────────────────────── */
+function setStateBadge(state) {
+    const map = {
+        idle:       ['dot-green','Idle'],
+        signing:    ['dot-amber','Signing…'],
+        processing: ['dot-red',  'Processing…'],
+    };
+    const [cls, txt] = map[state] || map.idle;
+    stateBadge.innerHTML = `<span class="dot ${cls} mr-1"></span> ${txt}`;
+}
+
+/* cleanup */
+window.addEventListener('beforeunload', () => {
+    isRunning = false;
+    if (stream) stream.getTracks().forEach(t=>t.stop());
+    if (sessionId) navigator.sendBeacon('/api/continuous/stop',
+        JSON.stringify({session_id:sessionId}));
+});
+
+console.log('✋ Continuous Sign Recognition loaded');
+</script>
+</body>
+</html>

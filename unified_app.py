@@ -128,7 +128,7 @@ def load_sign_to_speech_components():
         from INCLUDE.models.transformer import Transformer
         from INCLUDE.configs import TransformerConfig
 
-        model_path = os.path.join(project_root, 'INCLUDE', 'include_no_cnn_transformer_small.pth')
+        model_path = os.path.join(project_root, 'INCLUDE', 'include_no_cnn_transformer_large.pth')
         label_map_path = os.path.join(project_root, 'INCLUDE', 'label_maps', 'label_map_include.json')
 
         if not os.path.exists(model_path):
@@ -142,7 +142,7 @@ def load_sign_to_speech_components():
         idx_to_label = {v: k for k, v in label_map.items()}
         n_classes = len(label_map)  # 263
 
-        config = TransformerConfig(size='small')
+        config = TransformerConfig(size='large')
         model_obj = Transformer(config=config, n_classes=n_classes)
 
         checkpoint = torch.load(model_path, map_location='cpu', weights_only=False)
@@ -397,12 +397,14 @@ def _keypoints_to_tensor(pose_x, pose_y, h1_x, h1_y, h2_x, h2_y,
     mean = data.mean()
     std  = data.std() + 1e-8
     data = (data - mean) / std
+    # replace any remaining NaN/inf with 0
+    data = np.nan_to_num(data, nan=0.0, posinf=0.0, neginf=0.0)
 
     return torch.FloatTensor(data).unsqueeze(0)  # (1, T, 134)
 
 
 def run_include_inference(tensor):
-    """Run the INCLUDE50 transformer on a prepared tensor.
+    """Run the INCLUDE transformer on a prepared tensor.
     Returns (label_string, confidence_float)."""
     if not sign_model_loaded or sign_recognizer is None:
         raise RuntimeError("INCLUDE50 model not loaded")
@@ -415,8 +417,11 @@ def run_include_inference(tensor):
         probs  = torch.softmax(logits, dim=-1)
         conf, pred = probs.max(dim=-1)
 
+    confidence = conf.item()
+    if np.isnan(confidence) or np.isinf(confidence):
+        confidence = 0.0
+
     label = idx_to_label[pred.item()]
-    # Convert normalised label back to readable form (e.g. "goodmorning" → "good morning")
     label = label.replace('biglarge', 'big large') \
                  .replace('smalllittle', 'small little') \
                  .replace('goodmorning', 'good morning') \
@@ -424,7 +429,7 @@ def run_include_inference(tensor):
                  .replace('trainticket', 'train ticket') \
                  .replace('youplural', 'you (plural)') \
                  .replace('tshirt', 't-shirt')
-    return label, conf.item()
+    return label, confidence
 
 # ==================== NLP PREPROCESSING ====================
 

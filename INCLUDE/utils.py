@@ -27,9 +27,9 @@ def load_label_map(dataset):
 
 def get_experiment_name(args):
     exp_name = ""
-    if args.use_cnn:
+    if getattr(args, 'use_cnn', False):
         exp_name += "cnn_"
-    if args.use_augs:
+    if getattr(args, 'use_augs', False):
         exp_name += "augs_"
     exp_name += args.model
     return exp_name

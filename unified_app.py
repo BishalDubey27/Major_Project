@@ -404,10 +404,12 @@ def _keypoints_to_tensor(pose_x, pose_y, h1_x, h1_y, h2_x, h2_y,
 
 
 def run_include_inference(tensor):
-    """Run the INCLUDE transformer on a prepared tensor.
-    Returns (label_string, confidence_float)."""
+    """Run the INCLUDE50 transformer on a prepared tensor.
+    Returns (label_string, confidence_float) or (None, confidence) if below threshold."""
     if not sign_model_loaded or sign_recognizer is None:
-        raise RuntimeError("INCLUDE50 model not loaded")
+        raise RuntimeError("INCLUDE model not loaded")
+
+    CONFIDENCE_THRESHOLD = 0.4  # only return a label if model is at least 40% confident
 
     model_obj    = sign_recognizer['model']
     idx_to_label = sign_recognizer['idx_to_label']
@@ -421,6 +423,9 @@ def run_include_inference(tensor):
     if np.isnan(confidence) or np.isinf(confidence):
         confidence = 0.0
 
+    if confidence < CONFIDENCE_THRESHOLD:
+        return None, confidence  # not confident enough — don't guess
+
     label = idx_to_label[pred.item()]
     label = label.replace('biglarge', 'big large') \
                  .replace('smalllittle', 'small little') \
@@ -430,6 +435,7 @@ def run_include_inference(tensor):
                  .replace('youplural', 'you (plural)') \
                  .replace('tshirt', 't-shirt')
     return label, confidence
+
 
 # ==================== NLP PREPROCESSING ====================
 
@@ -776,6 +782,16 @@ def recognize_live_sign():
             if os.path.exists(temp_path):
                 os.remove(temp_path)
 
+        if predicted_text is None:
+            return jsonify({
+                'success': True,
+                'recognized_text': None,
+                'confidence': float(confidence),
+                'message': f'Low confidence ({confidence:.1%}) — show your hands clearly',
+                'is_demo': False,
+                'method': 'live_capture'
+            })
+
         audio_filename = generate_tts_audio(predicted_text)
         processing_time = (datetime.now() - start_time).total_seconds()
 
@@ -872,6 +888,15 @@ def upload_sign_video():
         finally:
             if os.path.exists(file_path):
                 os.remove(file_path)
+
+        if predicted_text is None:
+            return jsonify({
+                'success': True,
+                'recognized_text': None,
+                'confidence': float(confidence),
+                'message': f'Low confidence ({confidence:.1%}) — ensure hands are clearly visible and sign is from INCLUDE50 dataset',
+                'is_demo': False
+            })
 
         audio_filename = generate_tts_audio(predicted_text)
         processing_time = (datetime.now() - start_time).total_seconds()

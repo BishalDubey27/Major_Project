@@ -359,9 +359,9 @@ def _keypoints_to_tensor(pose_x, pose_y, h1_x, h1_y, h2_x, h2_y,
     import pandas as pd
 
     def combine_xy(x, y):
-        # x,y shape: (n_landmarks, n_frames) → match dataset.py combine_xy
-        x = np.array(x, dtype=np.float32).T  # (n_frames, n_landmarks)
-        y = np.array(y, dtype=np.float32).T
+        # x,y from video extractor: (n_frames, n_landmarks) — same as JSON format
+        x = np.array(x, dtype=np.float32)  # (n_frames, n_landmarks) — NO transpose
+        y = np.array(y, dtype=np.float32)
         n_frames, n_lm = x.shape
         x = x.reshape((n_frames, n_lm, 1))
         y = y.reshape((n_frames, n_lm, 1))
@@ -409,7 +409,7 @@ def run_include_inference(tensor):
     if not sign_model_loaded or sign_recognizer is None:
         raise RuntimeError("INCLUDE model not loaded")
 
-    CONFIDENCE_THRESHOLD = 0.4  # only return a label if model is at least 40% confident
+    CONFIDENCE_THRESHOLD = 0.0  # always return prediction
 
     model_obj    = sign_recognizer['model']
     idx_to_label = sign_recognizer['idx_to_label']

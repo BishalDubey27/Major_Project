@@ -160,10 +160,6 @@
                     </div>
                     <div class="text-center mb-5">
                         <div id="recognized-text" class="text-4xl font-bold text-white mb-2">-</div>
-                        <p class="text-white/60 text-sm">Confidence: <span id="confidence-value">0%</span></p>
-                        <div class="w-full bg-white/10 rounded-full h-2 mt-2">
-                            <div id="confidence-bar" class="confidence-bar bg-indigo-400 h-2 rounded-full" style="width:0%"></div>
-                        </div>
                     </div>
                     <div class="flex gap-2">
                         <button id="play-audio-btn" class="flex-1 py-2 bg-green-500 hover:bg-green-600 text-white rounded-lg text-sm font-semibold transition disabled:opacity-40" disabled>
@@ -478,10 +474,7 @@
 
     function showResults(data, elapsed) {
         recognitionResult = data;
-        recognizedText.textContent = data.recognized_text;
-        const pct = (data.confidence * 100).toFixed(1);
-        confidenceValue.textContent = pct + '%';
-        confidenceBar.style.width = pct + '%';
+        recognizedText.textContent = data.recognized_text || 'No sign detected';
         demoBadge.classList.toggle('hidden', !data.is_demo);
         if (data.audio_url) { playAudioBtn.disabled = false; audioPlayer.src = data.audio_url; }
         else { playAudioBtn.disabled = true; }

@@ -31,7 +31,6 @@
             min-width: 400px;
         }
         #prediction-label { font-size: 2rem; font-weight: bold; color: #00d4ff; min-height: 2.5rem; }
-        #confidence-label { font-size: 1rem; color: #aaa; margin-top: 4px; }
 
         #status-bar {
             margin-top: 12px;
@@ -61,7 +60,6 @@
 
     <div id="prediction-box">
         <div id="prediction-label">—</div>
-        <div id="confidence-label">Waiting for detection…</div>
     </div>
 
     <div id="status-bar">
@@ -80,7 +78,6 @@
     const canvas     = document.getElementById('canvas');
     const ctx        = canvas.getContext('2d');
     const predLabel  = document.getElementById('prediction-label');
-    const confLabel  = document.getElementById('confidence-label');
     const camDot     = document.getElementById('cam-dot');
     const camStatus  = document.getElementById('cam-status');
     const modelDot   = document.getElementById('model-dot');
@@ -102,15 +99,15 @@
     // ── Inference throttle ──────────────────────────────────────────────
     let inferring = false;
     let lastInferTime = 0;
-    const INFER_INTERVAL_MS = 800; // send a frame every 800 ms
+    const INFER_INTERVAL_MS = 800;
+    let handsDetected = false; // gate: only infer when hands are visible
 
     async function sendFrameForInference() {
         const now = Date.now();
-        if (inferring || now - lastInferTime < INFER_INTERVAL_MS) return;
+        if (!handsDetected || inferring || now - lastInferTime < INFER_INTERVAL_MS) return;
         inferring = true;
         lastInferTime = now;
 
-        // Capture from the (un-mirrored) video into a temp canvas
         const tmp = document.createElement('canvas');
         tmp.width  = video.videoWidth  || 640;
         tmp.height = video.videoHeight || 480;
@@ -125,7 +122,6 @@
                 const data = await res.json();
                 if (data.success && data.recognized_text) {
                     predLabel.textContent = data.recognized_text;
-                    confLabel.textContent = `Confidence: ${(data.confidence * 100).toFixed(1)}%`;
                 }
             } catch(e) {
                 console.warn('Inference error:', e);
@@ -155,6 +151,12 @@
         canvas.height = video.videoHeight || 480;
         ctx.clearRect(0, 0, canvas.width, canvas.height);
 
+        // ── Gate: check if at least one hand is visible ──
+        handsDetected = !!(results.leftHandLandmarks || results.rightHandLandmarks);
+        if (!handsDetected) {
+            predLabel.textContent = '—';
+        }
+
         // ── Draw pose skeleton (upper body) ──
         if (results.poseLandmarks) {
             drawConnectors(ctx, results.poseLandmarks, POSE_CONNECTIONS,
@@ -179,8 +181,8 @@
                 { color: '#ffffff', fillColor: '#ff6d00', lineWidth: 1, radius: 4 });
         }
 
-        // Trigger backend inference
-        sendFrameForInference();
+        // Only send to backend if hands are detected
+        if (handsDetected) sendFrameForInference();
     });
 
     // ── Start camera ────────────────────────────────────────────────────

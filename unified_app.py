@@ -128,8 +128,8 @@ def load_sign_to_speech_components():
         from INCLUDE.models.transformer import Transformer
         from INCLUDE.configs import TransformerConfig
 
-        model_path = os.path.join(project_root, 'INCLUDE', 'include_no_cnn_transformer_large.pth')
-        label_map_path = os.path.join(project_root, 'INCLUDE', 'label_maps', 'label_map_include.json')
+        model_path = os.path.join(project_root, 'INCLUDE', 'include50_no_cnn_transformer_large.pth')
+        label_map_path = os.path.join(project_root, 'INCLUDE', 'label_maps', 'label_map_include50.json')
 
         if not os.path.exists(model_path):
             logger.error(f"Model file not found: {model_path}")

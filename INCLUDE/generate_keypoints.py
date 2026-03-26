@@ -22,9 +22,10 @@ if not _USE_LEGACY:
     from mediapipe.tasks.python import vision as mp_vision
     import urllib.request, tempfile
 
-    # Download model files if not present
-    _HAND_MODEL = '/tmp/hand_landmarker.task'
-    _POSE_MODEL = '/tmp/pose_landmarker_lite.task'
+    # Use local task files shipped with the project (Windows-compatible paths)
+    _SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+    _HAND_MODEL = os.path.join(_SCRIPT_DIR, 'hand_landmarker.task')
+    _POSE_MODEL = os.path.join(_SCRIPT_DIR, 'pose_landmarker_lite.task')
     if not os.path.isfile(_HAND_MODEL):
         urllib.request.urlretrieve(
             'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/latest/hand_landmarker.task',

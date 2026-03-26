@@ -8,42 +8,22 @@
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body { font-family: Arial, sans-serif; background: #1a1a2e; color: #eee; display: flex; flex-direction: column; align-items: center; min-height: 100vh; padding: 20px; }
         h1 { margin: 20px 0 10px; color: #00d4ff; font-size: 1.8rem; }
-
-        #camera-wrapper {
-            position: relative;
-            width: 640px;
-            height: 480px;
-            border: 2px solid #00d4ff;
-            border-radius: 8px;
-            overflow: hidden;
-            background: #000;
-        }
+        #camera-wrapper { position: relative; width: 640px; height: 480px; border: 2px solid #00d4ff; border-radius: 8px; overflow: hidden; background: #000; }
         #video  { position: absolute; top: 0; left: 0; width: 100%; height: 100%; transform: scaleX(-1); }
         #canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; transform: scaleX(-1); }
-
-        #prediction-box {
-            margin-top: 20px;
-            background: #16213e;
-            border: 1px solid #00d4ff;
-            border-radius: 8px;
-            padding: 16px 40px;
-            text-align: center;
-            min-width: 400px;
-        }
+        #prediction-box { margin-top: 20px; background: #16213e; border: 1px solid #00d4ff; border-radius: 8px; padding: 16px 40px; text-align: center; min-width: 400px; }
         #prediction-label { font-size: 2rem; font-weight: bold; color: #00d4ff; min-height: 2.5rem; }
-
-        #status-bar {
-            margin-top: 12px;
-            font-size: 0.85rem;
-            color: #888;
-        }
+        #status-msg { font-size: 0.9rem; color: #aaa; margin-top: 6px; }
+        #status-bar { margin-top: 12px; font-size: 0.85rem; color: #888; }
         .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #888; margin-right: 6px; vertical-align: middle; }
-        .dot.green { background: #00e676; }
-        .dot.red   { background: #ff1744; }
+        .dot.green { background: #00e676; } .dot.red { background: #ff1744; }
+        #record-btn { margin-top: 14px; padding: 12px 40px; background: #00d4ff; color: #000; border: none; border-radius: 8px; font-size: 1.1rem; font-weight: bold; cursor: pointer; }
+        #record-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        #record-btn.recording { background: #ff1744; color: #fff; animation: pulse 1s infinite; }
+        @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.7} }
     </style>
 </head>
 <body>
-    <!-- Nav -->
     <nav style="display:flex;gap:10px;margin-bottom:10px;">
         <a href="/" style="padding:8px 16px;background:rgba(255,255,255,0.1);color:#fff;border-radius:8px;text-decoration:none;font-size:0.85rem;border:1px solid rgba(255,255,255,0.2);">✍️ Text to Sign</a>
         <a href="/sign-recognition" style="padding:8px 16px;background:rgba(255,255,255,0.1);color:#fff;border-radius:8px;text-decoration:none;font-size:0.85rem;border:1px solid rgba(255,255,255,0.2);">📁 Upload Video</a>
@@ -58,8 +38,11 @@
         <canvas id="canvas"></canvas>
     </div>
 
+    <button id="record-btn" disabled>⏺ Record Sign (3s)</button>
+
     <div id="prediction-box">
         <div id="prediction-label">—</div>
+        <div id="status-msg">Press Record and perform a sign for 3 seconds</div>
     </div>
 
     <div id="status-bar">
@@ -68,139 +51,122 @@
         <span class="dot" id="model-dot"></span><span id="model-status">Model: checking…</span>
     </div>
 
-    <!-- MediaPipe Holistic (hands + pose) from CDN -->
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/holistic/holistic.js" crossorigin="anonymous"></script>
 
     <script>
-    const video      = document.getElementById('video');
-    const canvas     = document.getElementById('canvas');
-    const ctx        = canvas.getContext('2d');
-    const predLabel  = document.getElementById('prediction-label');
-    const camDot     = document.getElementById('cam-dot');
-    const camStatus  = document.getElementById('cam-status');
-    const modelDot   = document.getElementById('model-dot');
-    const modelStatus= document.getElementById('model-status');
+    const video       = document.getElementById('video');
+    const canvas      = document.getElementById('canvas');
+    const ctx         = canvas.getContext('2d');
+    const predLabel   = document.getElementById('prediction-label');
+    const statusMsg   = document.getElementById('status-msg');
+    const recordBtn   = document.getElementById('record-btn');
+    const camDot      = document.getElementById('cam-dot');
+    const camStatus   = document.getElementById('cam-status');
+    const modelDot    = document.getElementById('model-dot');
+    const modelStatus = document.getElementById('model-status');
 
-    // ── Check model status ──────────────────────────────────────────────
-    fetch('/api/sign-recognition-status')
-        .then(r => r.json())
-        .then(d => {
-            if (d.model_loaded) {
-                modelDot.classList.add('green');
-                modelStatus.textContent = `Model: ready (${d.n_classes} classes)`;
+    let cameraStream = null;
+    let mediaRecorder = null;
+    let chunks = [];
+
+    fetch('/api/sign-recognition-status').then(r=>r.json()).then(d=>{
+        if(d.model_loaded){ modelDot.classList.add('green'); modelStatus.textContent=`Model: ready (${d.n_classes} classes)`; }
+        else { modelDot.classList.add('red'); modelStatus.textContent='Model: not loaded'; }
+    });
+
+    // ── Record 3s from raw camera stream and send to upload endpoint ─────
+    recordBtn.addEventListener('click', () => {
+        if (!cameraStream || mediaRecorder) return;
+        chunks = [];
+
+        // Use the raw camera stream (not the mirrored canvas) for accurate keypoints
+        const mimeType = ['video/mp4', 'video/webm;codecs=vp9', 'video/webm']
+            .find(t => MediaRecorder.isTypeSupported(t)) || 'video/webm';
+
+        mediaRecorder = new MediaRecorder(cameraStream, { mimeType, videoBitsPerSecond: 2500000 });
+        mediaRecorder.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
+        mediaRecorder.onstop = sendVideo;
+        mediaRecorder.start(100);
+
+        recordBtn.disabled = true;
+        recordBtn.classList.add('recording');
+        predLabel.textContent = '—';
+
+        let t = 3;
+        statusMsg.textContent = `Recording… ${t}s`;
+        const timer = setInterval(() => {
+            t--;
+            if (t > 0) { statusMsg.textContent = `Recording… ${t}s`; }
+            else { clearInterval(timer); mediaRecorder.stop(); }
+        }, 1000);
+    });
+
+    async function sendVideo() {
+        mediaRecorder = null;
+        recordBtn.classList.remove('recording');
+        statusMsg.textContent = 'Analyzing sign…';
+
+        const ext = chunks[0]?.type?.includes('mp4') ? 'mp4' : 'webm';
+        const blob = new Blob(chunks, { type: chunks[0]?.type || 'video/webm' });
+        const fd = new FormData();
+        fd.append('video', blob, `sign.${ext}`);
+
+        try {
+            const res  = await fetch('/upload-sign-video', { method: 'POST', body: fd });
+            const data = await res.json();
+            if (data.success && data.recognized_text) {
+                predLabel.textContent = data.recognized_text;
+                statusMsg.textContent = 'Sign detected!';
+                if (data.audio_url) new Audio(data.audio_url).play();
             } else {
-                modelDot.classList.add('red');
-                modelStatus.textContent = 'Model: not loaded';
+                predLabel.textContent = '—';
+                statusMsg.textContent = data.message || 'No sign detected — try again';
             }
-        });
-
-    // ── Inference throttle ──────────────────────────────────────────────
-    let inferring = false;
-    let lastInferTime = 0;
-    const INFER_INTERVAL_MS = 800;
-    let handsDetected = false; // gate: only infer when hands are visible
-
-    async function sendFrameForInference() {
-        const now = Date.now();
-        if (!handsDetected || inferring || now - lastInferTime < INFER_INTERVAL_MS) return;
-        inferring = true;
-        lastInferTime = now;
-
-        const tmp = document.createElement('canvas');
-        tmp.width  = video.videoWidth  || 640;
-        tmp.height = video.videoHeight || 480;
-        const tctx = tmp.getContext('2d');
-        tctx.drawImage(video, 0, 0, tmp.width, tmp.height);
-
-        tmp.toBlob(async blob => {
-            try {
-                const fd = new FormData();
-                fd.append('image', blob, 'frame.jpg');
-                const res  = await fetch('/recognize-live-sign', { method: 'POST', body: fd });
-                const data = await res.json();
-                if (data.success && data.recognized_text) {
-                    predLabel.textContent = data.recognized_text;
-                }
-            } catch(e) {
-                console.warn('Inference error:', e);
-            } finally {
-                inferring = false;
-            }
-        }, 'image/jpeg', 0.85);
+        } catch(e) {
+            statusMsg.textContent = 'Error: ' + e.message;
+        } finally {
+            recordBtn.disabled = false;
+        }
     }
 
-    // ── MediaPipe Holistic ──────────────────────────────────────────────
-    const holistic = new Holistic({
-        locateFile: file =>
-            `https://cdn.jsdelivr.net/npm/@mediapipe/holistic/${file}`
-    });
-
-    holistic.setOptions({
-        modelComplexity: 1,
-        smoothLandmarks: true,
-        enableSegmentation: false,
-        refineFaceLandmarks: false,
-        minDetectionConfidence: 0.5,
-        minTrackingConfidence: 0.5,
-    });
-
+    // ── MediaPipe landmark overlay only (no inference from JS landmarks) ──
+    const holistic = new Holistic({ locateFile: f => `https://cdn.jsdelivr.net/npm/@mediapipe/holistic/${f}` });
+    holistic.setOptions({ modelComplexity: 1, smoothLandmarks: true, enableSegmentation: false, refineFaceLandmarks: false, minDetectionConfidence: 0.5, minTrackingConfidence: 0.5 });
     holistic.onResults(results => {
         canvas.width  = video.videoWidth  || 640;
         canvas.height = video.videoHeight || 480;
         ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-        // ── Gate: check if at least one hand is visible ──
-        handsDetected = !!(results.leftHandLandmarks || results.rightHandLandmarks);
-        if (!handsDetected) {
-            predLabel.textContent = '—';
-        }
-
-        // ── Draw pose skeleton (upper body) ──
         if (results.poseLandmarks) {
-            drawConnectors(ctx, results.poseLandmarks, POSE_CONNECTIONS,
-                { color: '#00d4ff', lineWidth: 2 });
-            drawLandmarks(ctx, results.poseLandmarks,
-                { color: '#ffffff', fillColor: '#00d4ff', lineWidth: 1, radius: 3 });
+            drawConnectors(ctx, results.poseLandmarks, POSE_CONNECTIONS, { color: '#00d4ff', lineWidth: 2 });
+            drawLandmarks(ctx, results.poseLandmarks, { color: '#fff', fillColor: '#00d4ff', lineWidth: 1, radius: 3 });
         }
-
-        // ── Draw left hand ──
         if (results.leftHandLandmarks) {
-            drawConnectors(ctx, results.leftHandLandmarks, HAND_CONNECTIONS,
-                { color: '#00e676', lineWidth: 2 });
-            drawLandmarks(ctx, results.leftHandLandmarks,
-                { color: '#ffffff', fillColor: '#00e676', lineWidth: 1, radius: 4 });
+            drawConnectors(ctx, results.leftHandLandmarks, HAND_CONNECTIONS, { color: '#00e676', lineWidth: 2 });
+            drawLandmarks(ctx, results.leftHandLandmarks, { color: '#fff', fillColor: '#00e676', lineWidth: 1, radius: 4 });
         }
-
-        // ── Draw right hand ──
         if (results.rightHandLandmarks) {
-            drawConnectors(ctx, results.rightHandLandmarks, HAND_CONNECTIONS,
-                { color: '#ff6d00', lineWidth: 2 });
-            drawLandmarks(ctx, results.rightHandLandmarks,
-                { color: '#ffffff', fillColor: '#ff6d00', lineWidth: 1, radius: 4 });
+            drawConnectors(ctx, results.rightHandLandmarks, HAND_CONNECTIONS, { color: '#ff6d00', lineWidth: 2 });
+            drawLandmarks(ctx, results.rightHandLandmarks, { color: '#fff', fillColor: '#ff6d00', lineWidth: 1, radius: 4 });
         }
-
-        // Only send to backend if hands are detected
-        if (handsDetected) sendFrameForInference();
     });
 
-    // ── Start camera ────────────────────────────────────────────────────
-    const camera = new Camera(video, {
-        onFrame: async () => { await holistic.send({ image: video }); },
-        width: 640,
-        height: 480,
-    });
-
-    camera.start().then(() => {
-        camDot.classList.add('green');
-        camStatus.textContent = 'Camera: active';
-        console.log('📹 Live Sign Recognition interface initialized');
-    }).catch(err => {
-        camDot.classList.add('red');
-        camStatus.textContent = 'Camera: failed — ' + err.message;
-        console.error('Camera error:', err);
-    });
+    // ── Start camera ─────────────────────────────────────────────────────
+    navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480, facingMode: 'user' }, audio: false })
+        .then(stream => {
+            cameraStream = stream;
+            video.srcObject = stream;
+            camDot.classList.add('green');
+            camStatus.textContent = 'Camera: active';
+            recordBtn.disabled = false;
+            const mpCam = new Camera(video, { onFrame: async () => { await holistic.send({ image: video }); }, width: 640, height: 480 });
+            mpCam.start();
+        })
+        .catch(err => {
+            camDot.classList.add('red');
+            camStatus.textContent = 'Camera failed: ' + err.message;
+        });
     </script>
 </body>
 </html>

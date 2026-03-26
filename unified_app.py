@@ -856,6 +856,37 @@ def serve_audio(filename):
 
 # ==================== SIGN-TO-SPEECH ROUTES ====================
 
+@app.route('/recognize-from-keypoints', methods=['POST'])
+def recognize_from_keypoints():
+    """Receive keypoints extracted by MediaPipe JS and run inference directly."""
+    if not sign_model_loaded:
+        return jsonify({'success': False, 'error': 'Model not loaded'}), 503
+    try:
+        data = request.get_json()
+        pose_x  = data['pose_x'];  pose_y  = data['pose_y']
+        hand1_x = data['hand1_x']; hand1_y = data['hand1_y']
+        hand2_x = data['hand2_x']; hand2_y = data['hand2_y']
+
+        tensor = _keypoints_to_tensor(pose_x, pose_y, hand1_x, hand1_y, hand2_x, hand2_y)
+        predicted_text, confidence = run_include_inference(tensor)
+        logger.info(f"Keypoint inference: {predicted_text} ({confidence:.2f})")
+
+        if predicted_text is None:
+            return jsonify({'success': True, 'recognized_text': None,
+                           'message': 'Low confidence — try again with clearer sign'})
+
+        audio_filename = generate_tts_audio(predicted_text)
+        return jsonify({
+            'success': True,
+            'recognized_text': predicted_text,
+            'confidence': float(confidence),
+            'audio_url': f'/temp-audio/{audio_filename}' if audio_filename else None,
+        })
+    except Exception as e:
+        logger.error(f"Keypoint inference failed: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
 @app.route('/upload-sign-video', methods=['POST'])
 def upload_sign_video():
     """Handle sign video upload and recognition using INCLUDE50 transformer."""
@@ -878,10 +909,15 @@ def upload_sign_video():
         filename = secure_filename(file.filename)
         file_path = os.path.join(app.config['UPLOAD_FOLDER'], f"{uuid.uuid4().hex}_{filename}")
         file.save(file_path)
-        logger.info(f"Video uploaded: {file_path}")
+        file_size = os.path.getsize(file_path)
+        logger.info(f"Video saved: {file_path} ({file_size} bytes)")
 
         try:
             pose_x, pose_y, h1_x, h1_y, h2_x, h2_y = _extract_keypoints_from_video(file_path)
+            n_frames = len(pose_x)
+            logger.info(f"Keypoints extracted: {n_frames} frames")
+            if n_frames == 0:
+                return jsonify({'success': False, 'error': 'No frames extracted from video — file may be corrupt or unreadable'}), 400
             tensor = _keypoints_to_tensor(pose_x, pose_y, h1_x, h1_y, h2_x, h2_y)
             predicted_text, confidence = run_include_inference(tensor)
             logger.info(f"Sign recognized: {predicted_text} ({confidence:.2f})")

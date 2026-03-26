@@ -354,29 +354,33 @@ def _extract_keypoints_from_frame(frame_bgr):
 
 
 def _keypoints_to_tensor(pose_x, pose_y, h1_x, h1_y, h2_x, h2_y,
-                          max_frame_len=169, frame_length=1080, frame_width=1920):
-    """Convert raw keypoint lists to a normalised, padded tensor ready for the model."""
+                          max_frame_len=200, frame_length=1080, frame_width=1920):
+    """Convert raw keypoint lists to a normalised, padded tensor — exactly matching dataset.py."""
     import pandas as pd
 
     def combine_xy(x, y):
-        x, y = np.array(x, dtype=np.float32), np.array(y, dtype=np.float32)
-        _, length = x.shape
-        return np.concatenate([x.reshape(-1, length, 1), y.reshape(-1, length, 1)], axis=-1)
+        # x,y shape: (n_landmarks, n_frames) → match dataset.py combine_xy
+        x = np.array(x, dtype=np.float32).T  # (n_frames, n_landmarks)
+        y = np.array(y, dtype=np.float32).T
+        n_frames, n_lm = x.shape
+        x = x.reshape((n_frames, n_lm, 1))
+        y = y.reshape((n_frames, n_lm, 1))
+        return np.concatenate([x, y], axis=-1)  # (n_frames, n_lm, 2)
 
-    def interpolate(arr, scale_x, scale_y):
+    def interpolate(arr):
         arr_x = pd.DataFrame(arr[:, :, 0]).interpolate(method='linear', limit_direction='both').to_numpy()
         arr_y = pd.DataFrame(arr[:, :, 1]).interpolate(method='linear', limit_direction='both').to_numpy()
         if np.count_nonzero(~np.isnan(arr_x)) == 0:
             arr_x = np.zeros_like(arr_x)
         if np.count_nonzero(~np.isnan(arr_y)) == 0:
             arr_y = np.zeros_like(arr_y)
-        arr_x = arr_x * scale_x
-        arr_y = arr_y * scale_y
+        arr_x = arr_x * frame_width
+        arr_y = arr_y * frame_length
         return np.stack([arr_x, arr_y], axis=-1)
 
-    pose = interpolate(combine_xy(pose_x, pose_y), frame_width, frame_length)
-    h1   = interpolate(combine_xy(h1_x,   h1_y),   frame_width, frame_length)
-    h2   = interpolate(combine_xy(h2_x,   h2_y),   frame_width, frame_length)
+    pose = interpolate(combine_xy(pose_x, pose_y))   # (T, 25, 2)
+    h1   = interpolate(combine_xy(h1_x,   h1_y))     # (T, 21, 2)
+    h2   = interpolate(combine_xy(h2_x,   h2_y))     # (T, 21, 2)
 
     pose_flat = pose.reshape(-1, 50).astype(np.float32)
     h1_flat   = h1.reshape(-1, 42).astype(np.float32)
@@ -384,14 +388,12 @@ def _keypoints_to_tensor(pose_x, pose_y, h1_x, h1_y, h2_x, h2_y,
 
     data = np.concatenate([pose_flat, h1_flat, h2_flat], axis=-1)  # (T, 134)
 
-    # Pad or truncate to max_frame_len
     T = data.shape[0]
     if T >= max_frame_len:
         data = data[:max_frame_len]
     else:
         data = np.pad(data, ((0, max_frame_len - T), (0, 0)), 'constant')
 
-    # Normalise
     mean = data.mean()
     std  = data.std() + 1e-8
     data = (data - mean) / std

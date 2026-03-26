@@ -128,7 +128,7 @@ def load_sign_to_speech_components():
         from INCLUDE.models.transformer import Transformer
         from INCLUDE.configs import TransformerConfig
 
-        model_path = os.path.join(project_root, 'INCLUDE', 'include50_no_cnn_transformer_large.pth')
+        model_path = os.path.join(project_root, 'INCLUDE', 'augs_transformer (1).pth')
         label_map_path = os.path.join(project_root, 'INCLUDE', 'label_maps', 'label_map_include50.json')
 
         if not os.path.exists(model_path):
@@ -142,7 +142,7 @@ def load_sign_to_speech_components():
         idx_to_label = {v: k for k, v in label_map.items()}
         n_classes = len(label_map)  # 263
 
-        config = TransformerConfig(size='large')
+        config = TransformerConfig(size='small')
         model_obj = Transformer(config=config, n_classes=n_classes)
 
         checkpoint = torch.load(model_path, map_location='cpu', weights_only=False)

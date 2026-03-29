@@ -66,14 +66,25 @@ def fit(args):
     label_map = load_json(f"label_maps/label_map_{args.dataset}.json")
     n_classes = len(label_map)
 
-    config = TransformerConfig(size=args.transformer_size)
-    model = Transformer(config=config, n_classes=n_classes).to(device)
-
-    train_dir = os.path.join(args.data_dir, f"{args.dataset}_train_keypoints")
-    val_dir   = os.path.join(args.data_dir, f"{args.dataset}_val_keypoints")
-
-    train_ds = KeypointsDataset(train_dir, use_augs=args.use_augs, label_map=label_map, mode="train")
-    val_ds   = KeypointsDataset(val_dir,   use_augs=False,          label_map=label_map, mode="val")
+    if args.use_cnn:
+        from configs import CnnConfig
+        from dataset import FeaturesDatset
+        from models import LSTM
+        from configs import LstmConfig
+        lstm_config = LstmConfig()
+        lstm_config.input_size = CnnConfig.output_dim  # 1280
+        model = LSTM(config=lstm_config, n_classes=n_classes).to(device)
+        train_dir = os.path.join(args.data_dir, f"{args.dataset}_train_cnn_features")
+        val_dir   = os.path.join(args.data_dir, f"{args.dataset}_val_cnn_features")
+        train_ds  = FeaturesDatset(train_dir, label_map=label_map, mode="train")
+        val_ds    = FeaturesDatset(val_dir,   label_map=label_map, mode="val")
+    else:
+        config = TransformerConfig(size=args.transformer_size)
+        model = Transformer(config=config, n_classes=n_classes).to(device)
+        train_dir = os.path.join(args.data_dir, f"{args.dataset}_train_keypoints")
+        val_dir   = os.path.join(args.data_dir, f"{args.dataset}_val_keypoints")
+        train_ds  = KeypointsDataset(train_dir, use_augs=args.use_augs, label_map=label_map, mode="train")
+        val_ds    = KeypointsDataset(val_dir,   use_augs=False,          label_map=label_map, mode="val")
 
     train_loader = data.DataLoader(train_ds, batch_size=args.batch_size, shuffle=True,  num_workers=2)
     val_loader   = data.DataLoader(val_ds,   batch_size=args.batch_size, shuffle=False, num_workers=2)
@@ -108,20 +119,28 @@ def fit(args):
 def evaluate(args):
     label_map = load_json(f"label_maps/label_map_{args.dataset}.json")
     n_classes = len(label_map)
-    idx_to_label = {v: k for k, v in label_map.items()}
-
-    config = TransformerConfig(size=args.transformer_size)
-    model = Transformer(config=config, n_classes=n_classes).to(device)
 
     exp_name = get_experiment_name(args)
     save_path = os.path.join(args.save_path, f"{exp_name}.pth")
     checkpoint = torch.load(save_path, map_location=device, weights_only=False)
+
+    if args.use_cnn:
+        from configs import CnnConfig, LstmConfig
+        from dataset import FeaturesDatset
+        from models import LSTM
+        lstm_config = LstmConfig()
+        lstm_config.input_size = CnnConfig.output_dim
+        model = LSTM(config=lstm_config, n_classes=n_classes).to(device)
+        test_dir = os.path.join(args.data_dir, f"{args.dataset}_test_cnn_features")
+        test_ds  = FeaturesDatset(test_dir, label_map=label_map, mode="test")
+    else:
+        config = TransformerConfig(size=args.transformer_size)
+        model = Transformer(config=config, n_classes=n_classes).to(device)
+        test_dir = os.path.join(args.data_dir, f"{args.dataset}_test_keypoints")
+        test_ds  = KeypointsDataset(test_dir, use_augs=False, label_map=label_map, mode="test")
+
     model.load_state_dict(checkpoint["model"])
-
-    test_dir = os.path.join(args.data_dir, f"{args.dataset}_test_keypoints")
-    test_ds  = KeypointsDataset(test_dir, use_augs=False, label_map=label_map, mode="test")
     test_loader = data.DataLoader(test_ds, batch_size=args.batch_size, shuffle=False, num_workers=2)
-
     _, test_acc = validate(test_loader, model, device)
     print(f"Test accuracy: {test_acc:.4f}")
     return test_acc

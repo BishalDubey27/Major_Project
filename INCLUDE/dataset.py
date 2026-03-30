@@ -152,7 +152,18 @@ class KeypointsDataset(data.Dataset):
 class FeaturesDatset(data.Dataset):
     def __init__(self, features_dir, label_map, mode="train", max_frame_len=200):
         self.features_dir = features_dir
-        self.file_paths = sorted(glob.glob(os.path.join(features_dir, "*.npy")))
+        all_files = sorted(glob.glob(os.path.join(features_dir, "*.npy")))
+        # Filter out files whose label isn't in the label map
+        self.file_paths = []
+        skipped = 0
+        for f in all_files:
+            label = os.path.basename(f).split("_")[0]
+            if label in label_map:
+                self.file_paths.append(f)
+            else:
+                skipped += 1
+        if skipped:
+            print(f"[FeaturesDatset] Skipped {skipped} files with unknown labels")
         self.label_map = label_map
         self.mode = mode
         self.max_frame_len = max_frame_len

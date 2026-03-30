@@ -87,7 +87,7 @@ def save_cnn_features(args):
 
     for split in ['train', 'val', 'test']:
         kp_dir  = os.path.join(args.data_dir, f"{args.dataset}_{split}_keypoints")
-        out_dir = os.path.join(args.save_dir, f"{args.dataset}_{split}_cnn_features")
+        out_dir = os.path.join(args.data_dir, f"{args.dataset}_{split}_cnn_features")
         os.makedirs(out_dir, exist_ok=True)
 
         kp_files = sorted(glob.glob(os.path.join(kp_dir, "*.json")))

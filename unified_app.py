@@ -743,20 +743,22 @@ def get_video_playlist(query_text):
     logger.info(f"📜 Final playlist: {[(p['text'], p['match_type'], p['score']) for p in playlist]}")
     return playlist
 
-def generate_tts_audio(text):
-    """Generate TTS audio, save to temp_audio/ folder, return the filename."""
-    try:
-        tts = gTTS(text=text, lang='en', slow=False)
-        # Create a unique filename
-        safe_text = text.lower().replace(' ', '_')[:30]
-        audio_filename = f"{safe_text}_{uuid.uuid4().hex[:8]}.mp3"
-        audio_path = os.path.join(TEMP_AUDIO_FOLDER, audio_filename)
-        tts.save(audio_path)
-        logger.info(f"TTS audio saved: {audio_filename}")
-        return audio_filename
-    except Exception as e:
-        logger.error(f"TTS generation failed: {e}")
-        return None
+def get_or_create_audio(text):
+    """Return audio URL for text — uses cached file if exists, generates once if not."""
+    safe = text.lower().replace(' ', '_').replace('(', '').replace(')', '')
+    # Check knowledge_base first
+    kb_path = os.path.join('knowledge_base/generated_audio', f'{safe}.mp3')
+    if os.path.exists(kb_path):
+        return f'/audio/{safe}.mp3'
+    # Check permanent cache
+    cache_path = os.path.join('temp_audio', f'{safe}.mp3')
+    if not os.path.exists(cache_path):
+        try:
+            from gtts import gTTS
+            gTTS(text=text, lang='en', slow=False).save(cache_path)
+        except Exception:
+            return None
+    return f'/temp-audio/{safe}.mp3'
 
 
 def process_text_to_sign(input_text):
@@ -905,7 +907,7 @@ def recognize_from_keypoints():
             'success': True,
             'recognized_text': predicted_text,
             'confidence': float(confidence),
-            'audio_url': None,
+            'audio_url': get_or_create_audio(predicted_text),
         })
     except Exception as e:
         logger.error(f"Keypoint inference failed: {e}")
@@ -959,14 +961,13 @@ def upload_sign_video():
                 'is_demo': False
             })
 
-        audio_filename = None
         processing_time = (datetime.now() - start_time).total_seconds()
 
         return jsonify({
             'success': True,
             'recognized_text': predicted_text,
             'confidence': float(confidence),
-            'audio_url': None,
+            'audio_url': get_or_create_audio(predicted_text),
             'processing_time': processing_time,
             'message': f'Sign recognized: "{predicted_text}"',
             'is_demo': False

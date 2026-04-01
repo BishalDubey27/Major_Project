@@ -111,25 +111,61 @@ def load_text_to_sign_components():
         return False
 
 def load_sign_to_speech_components():
-    """Load the INCLUDE transformer model for sign-to-speech translation."""
+    """Load the CNN+LSTM model for sign-to-speech translation."""
     global sign_recognizer, sign_model_loaded
 
-    logger.info("Loading INCLUDE transformer model...")
+    logger.info("Loading CNN+LSTM sign recognition model...")
 
     try:
         import sys
         import json as _json
 
-        # Add project root so 'INCLUDE' is importable as a package
         project_root = os.path.dirname(os.path.abspath(__file__))
         if project_root not in sys.path:
             sys.path.insert(0, project_root)
 
-        from INCLUDE.models.transformer import Transformer
-        from INCLUDE.configs import TransformerConfig
+        from INCLUDE.models.lstm import LSTM
+        from INCLUDE.configs import LstmConfig, CnnConfig
 
-        model_path = os.path.join(project_root, 'INCLUDE', 'augs_transformer (1).pth')
-        label_map_path = os.path.join(project_root, 'INCLUDE', 'label_maps', 'label_map_include50.json')
+        model_path = os.path.join(project_root, 'INCLUDE', 'cnn_augs_lstm.pth')
+        label_map_path = os.path.join(project_root, 'INCLUDE', 'label_maps', 'label_map_include.json')
+
+        if not os.path.exists(model_path):
+            logger.error(f"Model file not found: {model_path}")
+            sign_model_loaded = False
+            return False
+
+        with open(label_map_path, 'r') as f:
+            label_map = _json.load(f)
+
+        idx_to_label = {v: k for k, v in label_map.items()}
+        n_classes = len(label_map)  # 263
+
+        config = LstmConfig()
+        config.input_size = CnnConfig.output_dim  # 1280 CNN features
+
+        model_obj = LSTM(config=config, n_classes=n_classes)
+        checkpoint = torch.load(model_path, map_location='cpu', weights_only=False)
+        state = checkpoint['model'] if 'model' in checkpoint else checkpoint
+        state = {k.replace('module.', ''): v for k, v in state.items()}
+        model_obj.load_state_dict(state)
+        model_obj.eval()
+
+        sign_recognizer = {
+            'model': model_obj,
+            'idx_to_label': idx_to_label,
+            'label_map': label_map,
+            'n_classes': n_classes,
+            'model_type': 'cnn_lstm',
+        }
+        sign_model_loaded = True
+        logger.info(f"CNN+LSTM model loaded — {n_classes} classes, score={checkpoint.get('score', 'N/A')}")
+        return True
+
+    except Exception as e:
+        logger.error(f"Failed to load CNN+LSTM model: {e}")
+        sign_model_loaded = False
+        return False
 
         if not os.path.exists(model_path):
             logger.error(f"Model file not found: {model_path}")
@@ -403,13 +439,59 @@ def _keypoints_to_tensor(pose_x, pose_y, h1_x, h1_y, h2_x, h2_y,
     return torch.FloatTensor(data).unsqueeze(0)  # (1, T, 134)
 
 
+def _extract_cnn_features_from_video(video_path, max_frames=200):
+    """Extract MobileNetV2 features from video frames for CNN+LSTM inference."""
+    import cv2
+    from torchvision import transforms
+
+    transform = transforms.Compose([
+        transforms.ToPILImage(),
+        transforms.Resize((224, 224)),
+        transforms.ToTensor(),
+        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+    ])
+
+    import sys
+    project_root = os.path.dirname(os.path.abspath(__file__))
+    if project_root not in sys.path:
+        sys.path.insert(0, project_root)
+    from INCLUDE.models import CNN
+    from INCLUDE.configs import CnnConfig
+
+    config = CnnConfig()
+    cnn = CNN(config)
+    cnn.eval()
+
+    cap = cv2.VideoCapture(video_path)
+    features = []
+    with torch.no_grad():
+        while cap.isOpened() and len(features) < max_frames:
+            ret, frame = cap.read()
+            if not ret:
+                break
+            rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            tensor = transform(rgb).unsqueeze(0)
+            feat = cnn(tensor).cpu().numpy().squeeze()
+            features.append(feat)
+    cap.release()
+    return np.array(features, dtype=np.float32)  # (T, 1280)
+
+
+def _cnn_features_to_tensor(features, max_frame_len=200):
+    """Pad/truncate CNN features and return tensor."""
+    T = features.shape[0]
+    if T >= max_frame_len:
+        features = features[:max_frame_len]
+    else:
+        features = np.pad(features, ((0, max_frame_len - T), (0, 0)), 'constant')
+    return torch.FloatTensor(features).unsqueeze(0)  # (1, T, 1280)
+
+
 def run_include_inference(tensor):
-    """Run the INCLUDE50 transformer on a prepared tensor.
+    """Run the CNN+LSTM model on a prepared tensor.
     Returns (label_string, confidence_float) or (None, confidence) if below threshold."""
     if not sign_model_loaded or sign_recognizer is None:
-        raise RuntimeError("INCLUDE model not loaded")
-
-    CONFIDENCE_THRESHOLD = 0.0  # always return prediction
+        raise RuntimeError("CNN+LSTM model not loaded")
 
     model_obj    = sign_recognizer['model']
     idx_to_label = sign_recognizer['idx_to_label']
@@ -423,18 +505,9 @@ def run_include_inference(tensor):
     if np.isnan(confidence) or np.isinf(confidence):
         confidence = 0.0
 
-    if confidence < CONFIDENCE_THRESHOLD:
-        return None, confidence  # not confident enough — don't guess
-
     label = idx_to_label[pred.item()]
-    label = label.replace('biglarge', 'big large') \
-                 .replace('smalllittle', 'small little') \
-                 .replace('goodmorning', 'good morning') \
-                 .replace('storeorshop', 'store or shop') \
-                 .replace('trainticket', 'train ticket') \
-                 .replace('youplural', 'you (plural)') \
-                 .replace('tshirt', 't-shirt')
     return label, confidence
+
 
 
 # ==================== NLP PREPROCESSING ====================
@@ -753,58 +826,11 @@ def continuous_sign_recognition_page():
 
 @app.route('/recognize-live-sign', methods=['POST'])
 def recognize_live_sign():
-    """Handle live sign recognition from a single captured frame using INCLUDE50."""
-    start_time = datetime.now()
-
-    if not sign_model_loaded:
-        return jsonify({'success': False, 'error': 'Sign recognition model not loaded'}), 503
-
-    try:
-        if not request.content_type.startswith('multipart/form-data'):
-            return jsonify({'error': 'Expected multipart/form-data with an image field'}), 400
-
-        if 'image' not in request.files:
-            return jsonify({'error': 'No image provided'}), 400
-
-        image_file = request.files['image']
-        temp_path = os.path.join(UPLOAD_FOLDER, f"live_{uuid.uuid4().hex}.jpg")
-        image_file.save(temp_path)
-
-        try:
-            import cv2 as _cv2
-            frame = _cv2.imread(temp_path)
-            if frame is None:
-                return jsonify({'error': 'Could not decode image'}), 400
-            pose_x, pose_y, h1_x, h1_y, h2_x, h2_y = _extract_keypoints_from_frame(frame)
-            tensor = _keypoints_to_tensor(pose_x, pose_y, h1_x, h1_y, h2_x, h2_y)
-            predicted_text, confidence = run_include_inference(tensor)
-        finally:
-            if os.path.exists(temp_path):
-                os.remove(temp_path)
-
-        if predicted_text is None:
-            return jsonify({
-                'success': True,
-                'recognized_text': None,
-                'confidence': float(confidence),
-                'message': f'Low confidence ({confidence:.1%}) — show your hands clearly',
-                'is_demo': False,
-                'method': 'live_capture'
-            })
-
-        audio_filename = generate_tts_audio(predicted_text)
-        processing_time = (datetime.now() - start_time).total_seconds()
-
-        return jsonify({
-            'success': True,
-            'recognized_text': predicted_text,
-            'confidence': float(confidence),
-            'audio_url': f'/temp-audio/{audio_filename}' if audio_filename else None,
-            'processing_time': processing_time,
-            'message': f'Live recognition: "{predicted_text}"',
-            'is_demo': False,
-            'method': 'live_capture'
-        })
+    """Handle live sign recognition — CNN+LSTM needs video sequence, use /upload-sign-video."""
+    return jsonify({
+        'success': False,
+        'error': 'Use the Record button to capture a 3-second video for recognition'
+    }), 400
 
     except Exception as e:
         logger.error(f"Live sign recognition failed: {e}")
@@ -913,12 +939,12 @@ def upload_sign_video():
         logger.info(f"Video saved: {file_path} ({file_size} bytes)")
 
         try:
-            pose_x, pose_y, h1_x, h1_y, h2_x, h2_y = _extract_keypoints_from_video(file_path)
-            n_frames = len(pose_x)
-            logger.info(f"Keypoints extracted: {n_frames} frames")
+            features = _extract_cnn_features_from_video(file_path)
+            n_frames = len(features)
+            logger.info(f"CNN features extracted: {n_frames} frames")
             if n_frames == 0:
-                return jsonify({'success': False, 'error': 'No frames extracted from video — file may be corrupt or unreadable'}), 400
-            tensor = _keypoints_to_tensor(pose_x, pose_y, h1_x, h1_y, h2_x, h2_y)
+                return jsonify({'success': False, 'error': 'No frames extracted from video'}), 400
+            tensor = _cnn_features_to_tensor(features)
             predicted_text, confidence = run_include_inference(tensor)
             logger.info(f"Sign recognized: {predicted_text} ({confidence:.2f})")
         finally:

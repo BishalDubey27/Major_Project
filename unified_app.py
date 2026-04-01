@@ -834,10 +834,6 @@ def recognize_live_sign():
         'error': 'Use the Record button to capture a 3-second video for recognition'
     }), 400
 
-    except Exception as e:
-        logger.error(f"Live sign recognition failed: {e}")
-        return jsonify({'success': False, 'error': 'Live recognition failed', 'details': str(e)}), 500
-
 # ==================== TEXT-TO-SIGN ROUTES ====================
 
 @app.route('/search', methods=['POST'])

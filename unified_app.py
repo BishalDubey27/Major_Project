@@ -901,12 +901,11 @@ def recognize_from_keypoints():
             return jsonify({'success': True, 'recognized_text': None,
                            'message': 'Low confidence — try again with clearer sign'})
 
-        audio_filename = generate_tts_audio(predicted_text)
         return jsonify({
             'success': True,
             'recognized_text': predicted_text,
             'confidence': float(confidence),
-            'audio_url': f'/temp-audio/{audio_filename}' if audio_filename else None,
+            'audio_url': None,
         })
     except Exception as e:
         logger.error(f"Keypoint inference failed: {e}")
@@ -960,16 +959,16 @@ def upload_sign_video():
                 'is_demo': False
             })
 
-        audio_filename = generate_tts_audio(predicted_text)
+        audio_filename = None
         processing_time = (datetime.now() - start_time).total_seconds()
 
         return jsonify({
             'success': True,
             'recognized_text': predicted_text,
             'confidence': float(confidence),
-            'audio_url': f'/temp-audio/{audio_filename}' if audio_filename else None,
+            'audio_url': None,
             'processing_time': processing_time,
-            'message': f'Sign recognized: "{predicted_text}" with {confidence:.1%} confidence',
+            'message': f'Sign recognized: "{predicted_text}"',
             'is_demo': False
         })
 

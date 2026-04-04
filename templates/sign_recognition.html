@@ -11,47 +11,121 @@
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/holistic/holistic.js" crossorigin="anonymous"></script>
     <style>
-        body { font-family: 'Inter', sans-serif; background: linear-gradient(135deg, #0f0c29, #302b63, #24243e); min-height: 100vh; }
-        .glass { background: rgba(255,255,255,0.08); backdrop-filter: blur(12px); border: 1px solid rgba(255,255,255,0.15); }
-        .tab-btn { transition: all 0.2s; }
-        .tab-btn.active { background: rgba(99,102,241,0.8); border-color: rgba(99,102,241,1); }
-        .tab-btn:not(.active) { background: rgba(255,255,255,0.08); border-color: rgba(255,255,255,0.2); }
-        .upload-zone { border: 2px dashed rgba(255,255,255,0.25); transition: all 0.3s; }
-        .upload-zone:hover, .upload-zone.dragover { border-color: #6366f1; background: rgba(99,102,241,0.1); }
-        .loader { border: 3px solid rgba(255,255,255,0.2); border-top: 3px solid #6366f1; border-radius: 50%; width: 36px; height: 36px; animation: spin 0.8s linear infinite; }
-        @keyframes spin { to { transform: rotate(360deg); } }
+        body { 
+            font-family: 'Inter', sans-serif; 
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
+            min-height: 100vh; 
+        }
+        .glass { 
+            background: rgba(255, 255, 255, 0.1); 
+            backdrop-filter: blur(10px); 
+            border: 1px solid rgba(255, 255, 255, 0.2); 
+        }
+        .tab-btn { transition: all 0.3s ease; }
+        .tab-btn.active { 
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
+            border-color: rgba(255, 255, 255, 0.3); 
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.2);
+        }
+        .tab-btn:not(.active) { 
+            background: rgba(255, 255, 255, 0.1); 
+            border-color: rgba(255, 255, 255, 0.2); 
+        }
+        .tab-btn:hover { 
+            transform: translateY(-2px); 
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.2); 
+        }
+        .upload-zone { 
+            border: 2px dashed rgba(255, 255, 255, 0.3); 
+            transition: all 0.3s; 
+        }
+        .upload-zone:hover, .upload-zone.dragover { 
+            border-color: #667eea; 
+            background: rgba(102, 126, 234, 0.1); 
+        }
+        .loader { 
+            border: 4px solid #f3f3f3; 
+            border-top: 4px solid #667eea; 
+            border-radius: 50%; 
+            width: 40px; 
+            height: 40px; 
+            animation: spin 1s linear infinite; 
+        }
+        @keyframes spin { 
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
         .confidence-bar { transition: width 0.6s ease; }
         .result-in { animation: fadeUp 0.4s ease; }
         @keyframes fadeUp { from { opacity:0; transform:translateY(16px); } to { opacity:1; transform:translateY(0); } }
         #camera-feed { width: 100%; border-radius: 12px; background: #000; max-height: 320px; object-fit: cover; }
-        .nav-link { transition: all 0.2s; }
-        .nav-link:hover { background: rgba(255,255,255,0.15); }
+        .nav-link { 
+            transition: all 0.3s ease; 
+        }
+        .nav-link:hover { 
+            background: rgba(255, 255, 255, 0.2); 
+            transform: translateY(-2px);
+        }
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            transition: all 0.3s ease;
+        }
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.2);
+        }
     </style>
 </head>
 <body class="p-4 md:p-6">
 <div class="max-w-6xl mx-auto">
 
     <!-- Header -->
-    <div class="glass rounded-2xl p-5 mb-6 text-white">
-        <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-            <div>
-                <h1 class="text-2xl md:text-3xl font-bold">🎥 Sign to Speech</h1>
-                <p class="text-white/60 text-sm mt-1">Recognize Indian Sign Language from video or camera</p>
+    <div class="text-center mb-8">
+        <h1 class="text-4xl md:text-6xl font-bold text-white mb-4">
+            🎥 ISL Sign Recognition
+        </h1>
+        <p class="text-xl text-white opacity-90 mb-6">
+            AI-Powered Sign Language to Speech Translation
+        </p>
+        
+        <!-- Navigation -->
+        <div class="flex flex-wrap justify-center gap-4 mb-6">
+            <a href="/" class="glass px-6 py-3 rounded-full text-white hover:bg-white/20 transition">
+                📝 Text to Sign
+            </a>
+            <div class="glass px-6 py-3 rounded-full">
+                <span class="text-white font-semibold">🎥 Sign to Speech</span>
+                <span class="text-white/70 ml-2">(Current)</span>
             </div>
-            <div class="flex flex-wrap gap-2">
-                <a href="/" class="nav-link px-4 py-2 rounded-lg border border-white/20 text-white text-sm font-medium">
-                    ✍️ Text to Sign
-                </a>
-                <a href="/live-sign-recognition" class="nav-link px-4 py-2 rounded-lg border border-green-500/50 bg-green-500/20 text-white text-sm font-medium">
-                    📹 Live Camera
-                </a>
-                <a href="/continuous-sign-recognition" class="nav-link px-4 py-2 rounded-lg border border-purple-500/50 bg-purple-500/20 text-white text-sm font-medium">
-                    🔄 Continuous Detection
-                </a>
-                <button id="demo-btn" class="nav-link px-4 py-2 rounded-lg border border-blue-500/50 bg-blue-500/20 text-white text-sm font-medium">
-                    🎭 Try Demo
-                </button>
-            </div>
+            <a href="/live-sign-recognition" class="glass px-6 py-3 rounded-full text-white hover:bg-white/20 transition">
+                📹 Live Camera
+            </a>
+            <a href="/continuous-sign-recognition" class="glass px-6 py-3 rounded-full text-white hover:bg-white/20 transition">
+                🔄 Continuous
+            </a>
+            <a href="/contribute" class="glass px-6 py-3 rounded-full text-white hover:bg-white/20 transition">
+                ➕ Contribute
+            </a>
+        </div>
+        
+        <!-- Features -->
+        <div class="flex flex-wrap justify-center gap-4">
+            <span class="glass px-4 py-2 rounded-full text-white text-sm">
+                🤖 CNN+LSTM Model
+            </span>
+            <span class="glass px-4 py-2 rounded-full text-white text-sm">
+                🔊 TTS Audio
+            </span>
+            <span class="glass px-4 py-2 rounded-full text-white text-sm">
+                📹 Live Camera
+            </span>
+            <span class="glass px-4 py-2 rounded-full text-white text-sm">
+                🎯 263 Signs
+            </span>
+            <button id="demo-btn" class="glass px-4 py-2 rounded-full text-white hover:bg-white/20 transition text-sm cursor-pointer">
+                🎭 Try Demo
+            </button>
         </div>
     </div>
 
@@ -78,7 +152,7 @@
                         <div class="text-5xl mb-3">🎬</div>
                         <p class="text-white font-semibold mb-1">Drop video here or click to browse</p>
                         <p class="text-white/50 text-sm mb-4">MP4, AVI, MOV, WEBM — max 100 MB</p>
-                        <button id="browse-btn" class="px-5 py-2 bg-indigo-500 hover:bg-indigo-600 text-white rounded-lg font-semibold text-sm transition">
+                        <button id="browse-btn" class="btn-primary px-5 py-2 text-white rounded-lg font-semibold text-sm">
                             📁 Browse Files
                         </button>
                         <input type="file" id="video-input" accept="video/*" class="hidden">
@@ -111,7 +185,7 @@
                     <canvas id="landmark-canvas" style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;border-radius:12px;"></canvas>
                 </div>
                 <div class="flex gap-2 mb-3">
-                    <button id="start-camera-btn" class="flex-1 py-2 bg-indigo-500 hover:bg-indigo-600 text-white rounded-lg font-semibold text-sm transition">
+                    <button id="start-camera-btn" class="btn-primary flex-1 py-2 text-white rounded-lg font-semibold text-sm">
                         📷 Start Camera
                     </button>
                     <button id="record-btn" class="flex-1 py-2 bg-red-500 hover:bg-red-600 text-white rounded-lg font-semibold text-sm transition hidden">
@@ -165,8 +239,8 @@
                         <button id="play-audio-btn" class="flex-1 py-2 bg-green-500 hover:bg-green-600 text-white rounded-lg text-sm font-semibold transition disabled:opacity-40" disabled>
                             🔊 Play Audio
                         </button>
-                        <button id="copy-text-btn" class="px-4 py-2 bg-indigo-500 hover:bg-indigo-600 text-white rounded-lg text-sm transition">
-                            � Copy
+                        <button id="copy-text-btn" class="btn-primary px-4 py-2 text-white rounded-lg text-sm">
+                            📋 Copy
                         </button>
                     </div>
                 </div>
@@ -194,26 +268,26 @@
 
     <!-- How to use -->
     <div class="glass rounded-2xl p-6 mt-6">
-        <h2 class="text-lg font-bold text-white mb-4">📋 How to Use</h2>
-        <div class="grid grid-cols-1 md:grid-cols-4 gap-4 text-white/70 text-sm">
+        <h2 class="text-2xl font-bold text-white mb-6 text-center">📋 How to Use</h2>
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-6 text-white/80 text-sm">
             <div class="text-center">
-                <div class="text-3xl mb-2">1️⃣</div>
-                <p class="font-semibold text-white mb-1">Choose Mode</p>
+                <div class="text-5xl mb-3">1️⃣</div>
+                <p class="font-semibold text-white text-lg mb-2">Choose Mode</p>
                 <p>Upload a saved video or record live using your camera</p>
             </div>
             <div class="text-center">
-                <div class="text-3xl mb-2">2️⃣</div>
-                <p class="font-semibold text-white mb-1">Provide Video</p>
+                <div class="text-5xl mb-3">2️⃣</div>
+                <p class="font-semibold text-white text-lg mb-2">Provide Video</p>
                 <p>Drop a file or record yourself signing</p>
             </div>
             <div class="text-center">
-                <div class="text-3xl mb-2">3️⃣</div>
-                <p class="font-semibold text-white mb-1">AI Analysis</p>
+                <div class="text-5xl mb-3">3️⃣</div>
+                <p class="font-semibold text-white text-lg mb-2">AI Analysis</p>
                 <p>MediaPipe extracts landmarks, LSTM classifies the sign</p>
             </div>
             <div class="text-center">
-                <div class="text-3xl mb-2">4️⃣</div>
-                <p class="font-semibold text-white mb-1">Get Results</p>
+                <div class="text-5xl mb-3">4️⃣</div>
+                <p class="font-semibold text-white text-lg mb-2">Get Results</p>
                 <p>See the recognized sign with confidence and audio</p>
             </div>
         </div>

@@ -6,6 +6,13 @@ Complete text-to-sign and sign-to-speech translation system
 
 import os
 import json
+
+# Download model from HF Hub if not present locally
+try:
+    from download_model import download_model_if_needed
+    download_model_if_needed()
+except Exception as e:
+    print(f"Model download skipped: {e}")
 import string
 import uuid
 import logging
@@ -1390,4 +1397,4 @@ if __name__ == '__main__':
     print("="*70)
     
     # Start Flask app
-    app.run(host='0.0.0.0', port=5000, debug=False)
+    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)), debug=False)

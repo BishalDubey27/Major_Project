@@ -26,15 +26,21 @@ wheels/
 *.egg
 MANIFEST
 
-# FAISS index and other generated files
-*.faiss
-*.json
+# FAISS index (but keep metadata and config files)
+video_index.faiss
+index_map.json
+
+# Keep these JSON files in version control:
+# - knowledge_base/metadata.json (required for video mapping)
+# - knowledge_base/synonym_dict.json (optional synonyms)
+# - INCLUDE/label_maps/*.json (required for sign recognition)
 
 # IDE / Editor
 .vscode/
 
-# Generated audio files
-knowledge_base/generated_audio/
+# Generated audio files (keep folder structure but ignore contents)
+knowledge_base/generated_audio/*.mp3
+!knowledge_base/generated_audio/.gitkeep
 
 # Python cache
 *.pyc

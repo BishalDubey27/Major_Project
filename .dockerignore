@@ -36,8 +36,10 @@ temp_audio/*
 !uploads/.gitkeep
 !temp_audio/.gitkeep
 
-# Large model files (if not needed)
-# *.pth
+# IMPORTANT: The following are INCLUDED in the Docker image:
+# - knowledge_base/videos/*.mp4 (video files - REQUIRED)
+# - knowledge_base/metadata.json (video metadata - REQUIRED)
+# - *.pth (model weights - REQUIRED)
 
 # Vercel deployment files
 vercel.json

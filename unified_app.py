@@ -128,7 +128,25 @@ def load_sign_to_speech_components():
         from INCLUDE.models.transformer import Transformer
         from INCLUDE.configs import TransformerConfig
 
-        model_path = os.path.join(project_root, 'INCLUDE', 'augs_transformer (1).pth')
+        # Try multiple possible model paths
+        possible_model_paths = [
+            os.path.join(project_root, 'augs_transformer.pth'),
+            os.path.join(project_root, 'INCLUDE', 'augs_transformer (1).pth'),
+            os.path.join(project_root, 'INCLUDE', 'include_no_cnn_transformer_small.pth'),
+        ]
+        
+        model_path = None
+        for path in possible_model_paths:
+            if os.path.exists(path):
+                model_path = path
+                logger.info(f"Found model at: {model_path}")
+                break
+        
+        if not model_path:
+            logger.error(f"Model file not found. Tried: {possible_model_paths}")
+            sign_model_loaded = False
+            return False
+
         label_map_path = os.path.join(project_root, 'INCLUDE', 'label_maps', 'label_map_include50.json')
 
         if not os.path.exists(model_path):
@@ -836,8 +854,18 @@ def search():
 
 @app.route('/videos/<path:filename>')
 def serve_video(filename):
-    """Serve video files"""
-    return send_from_directory('knowledge_base/videos', filename)
+    """Serve video files with proper error handling"""
+    video_path = os.path.join('knowledge_base/videos', filename)
+    
+    if not os.path.exists(video_path):
+        logger.error(f"Video file not found: {video_path}")
+        return jsonify({"error": "Video file not found", "filename": filename}), 404
+    
+    try:
+        return send_from_directory('knowledge_base/videos', filename, mimetype='video/mp4')
+    except Exception as e:
+        logger.error(f"Failed to serve video file {filename}: {e}")
+        return jsonify({"error": "Failed to serve video file"}), 500
 
 @app.route('/audio/<path:filename>')
 def serve_audio(filename):

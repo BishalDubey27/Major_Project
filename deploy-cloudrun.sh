@@ -30,7 +30,7 @@ gcloud config set project ${PROJECT_ID}
 # Build the Docker image using Cloud Build
 echo ""
 echo "🔨 Building Docker image with Cloud Build..."
-gcloud builds submit --tag ${IMAGE_NAME} --dockerfile Dockerfile.cloudrun --timeout=20m
+gcloud builds submit --config cloudbuild.yaml --timeout=20m
 
 # Deploy to Cloud Run
 echo ""

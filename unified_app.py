@@ -79,9 +79,12 @@ def load_text_to_sign_components():
         
         logger.info(f"📹 Found {len(metadata_list)} available video phrases")
         
-        # Create helper mappings
+        # Create helper mappings - CRITICAL: These must be populated
         known_phrases_sorted = sorted([item['text'].lower() for item in metadata_list], key=len, reverse=True)
         text_to_file_map = {item['text'].lower(): item['file'] for item in metadata_list}
+        
+        logger.info(f"📋 Created {len(known_phrases_sorted)} phrase mappings")
+        logger.info(f"📋 Sample phrases: {known_phrases_sorted[:5]}")
         
         # Load synonyms (optional)
         synonym_path = 'knowledge_base/synonym_dict.json'
@@ -90,6 +93,8 @@ def load_text_to_sign_components():
             with open(synonym_path, 'r', encoding='utf-8') as f:
                 synonym_dict = json.load(f)
             logger.info(f"📝 Loaded {len(synonym_dict)} synonym mappings")
+        else:
+            logger.info("📝 No synonym dictionary found, using empty dict")
         
         # Load FAISS index for semantic search fallback
         faiss_path = 'video_index.faiss'
@@ -104,10 +109,14 @@ def load_text_to_sign_components():
             logger.warning("⚠️ FAISS index not found - run setup_database.py to enable semantic search")
         
         logger.info("✅ Text-to-sign components loaded successfully!")
+        logger.info(f"✅ known_phrases_sorted has {len(known_phrases_sorted) if known_phrases_sorted else 0} entries")
+        logger.info(f"✅ text_to_file_map has {len(text_to_file_map) if text_to_file_map else 0} entries")
         return True
         
     except Exception as e:
         logger.error(f"Failed to load text-to-sign components: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
         return False
 
 def load_sign_to_speech_components():

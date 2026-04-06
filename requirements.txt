@@ -1,17 +1,18 @@
 # Core AI and ML Libraries
-sentence-transformers==2.7.0    # Text embeddings for FAISS semantic search + auto-synonym discovery
-faiss-cpu==1.8.0                # Vector similarity search (semantic fallback in /search)
-numpy==1.26.4                   # Numerical operations for FAISS index building
+sentence-transformers==2.7.0
+faiss-cpu==1.8.0
+numpy==1.26.4
 scikit-learn==1.5.1
 
 # Web Framework
 flask==3.0.3
 werkzeug==3.0.3
 jinja2==3.1.4
+gunicorn==21.2.0
 
 # Video Processing
 moviepy==1.0.3
-opencv-python==4.10.0.84
+opencv-python-headless==4.10.0.84
 imageio==2.34.2
 imageio-ffmpeg==0.5.1
 Pillow==10.4.0
@@ -47,19 +48,9 @@ mediapipe==0.10.9
 matplotlib>=3.4.0
 seaborn>=0.11.0
 tensorboard>=2.7.0
-zipfile36>=0.1.3
 
-torch
-torchvision
-pandas
-numpy
 transformers==4.44.0
 timm
-mediapipe
-tqdm
-scikit-learn
-xgboost
-opencv-python
 joblib
-matplotlib
-seaborn
+xgboost
+

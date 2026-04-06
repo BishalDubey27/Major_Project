@@ -867,23 +867,43 @@ def search():
 
 @app.route('/videos/<path:filename>')
 def serve_video(filename):
-    """Serve video files"""
-    return send_from_directory('knowledge_base/videos', filename)
+    """Serve video files from GCS or local storage"""
+    use_gcs = os.environ.get('USE_GCS', 'false').lower() == 'true'
+    
+    if use_gcs:
+        # Redirect to GCS public URL
+        from flask import redirect
+        gcs_bucket = os.environ.get('GCS_BUCKET', 'isl-translator-492416-videos')
+        gcs_url = f"https://storage.googleapis.com/{gcs_bucket}/videos/{filename}"
+        return redirect(gcs_url)
+    else:
+        # Serve from local storage
+        return send_from_directory('knowledge_base/videos', filename)
 
 @app.route('/audio/<path:filename>')
 def serve_audio(filename):
-    """Serve audio files with enhanced error handling"""
-    audio_path = os.path.join('knowledge_base/generated_audio', filename)
+    """Serve audio files from GCS or local storage"""
+    use_gcs = os.environ.get('USE_GCS', 'false').lower() == 'true'
+    
+    if use_gcs:
+        # Redirect to GCS public URL
+        from flask import redirect
+        gcs_bucket = os.environ.get('GCS_BUCKET', 'isl-translator-492416-videos')
+        gcs_url = f"https://storage.googleapis.com/{gcs_bucket}/audio/{filename}"
+        return redirect(gcs_url)
+    else:
+        # Serve from local storage
+        audio_path = os.path.join('knowledge_base/generated_audio', filename)
 
-    if not os.path.exists(audio_path):
-        logger.error(f"Audio file not found: {audio_path}")
-        return jsonify({"error": "Audio file not found"}), 404
+        if not os.path.exists(audio_path):
+            logger.error(f"Audio file not found: {audio_path}")
+            return jsonify({"error": "Audio file not found"}), 404
 
-    try:
-        return send_from_directory('knowledge_base/generated_audio', filename, mimetype='audio/mpeg')
-    except Exception as e:
-        logger.error(f"Failed to serve audio file: {e}")
-        return jsonify({"error": "Failed to serve audio file"}), 500
+        try:
+            return send_from_directory('knowledge_base/generated_audio', filename, mimetype='audio/mpeg')
+        except Exception as e:
+            logger.error(f"Failed to serve audio file: {e}")
+            return jsonify({"error": "Failed to serve audio file"}), 500
 
 # ==================== SIGN-TO-SPEECH ROUTES ====================
 
@@ -1386,15 +1406,20 @@ if __name__ == '__main__':
     print("\n" + "="*70)
     print("🚀 SYSTEM READY!")
     print("="*70)
-    print("📍 Main URL: http://127.0.0.1:5000")
-    print("🔤 Text-to-Sign: http://127.0.0.1:5000/")
-    print("🎥 Sign-to-Speech: http://127.0.0.1:5000/sign-recognition")
-    print("✋ Continuous: http://127.0.0.1:5000/continuous-sign-recognition")
-    print("📊 System Stats: http://127.0.0.1:5000/api/stats")
-    print("💚 Health Check: http://127.0.0.1:5000/health")
+    
+    # Get port from environment variable (Cloud Run compatibility)
+    port = int(os.environ.get('PORT', 5000))
+    host = os.environ.get('HOST', '0.0.0.0')
+    
+    print(f"📍 Main URL: http://{host}:{port}")
+    print(f"🔤 Text-to-Sign: http://{host}:{port}/")
+    print(f"🎥 Sign-to-Speech: http://{host}:{port}/sign-recognition")
+    print(f"✋ Continuous: http://{host}:{port}/continuous-sign-recognition")
+    print(f"📊 System Stats: http://{host}:{port}/api/stats")
+    print(f"💚 Health Check: http://{host}:{port}/health")
     print("="*70)
     print("⏹️ Press Ctrl+C to stop the server")
     print("="*70)
     
     # Start Flask app
-    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)), debug=False)
+    app.run(host=host, port=port, debug=False)

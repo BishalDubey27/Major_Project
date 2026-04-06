@@ -1,0 +1,62 @@
+=== VIDEO LOADING FIX FOR CLOUD RUN ===
+
+PROBLEM IDENTIFIED:
+The Dockerfile was creating an empty knowledge_base/videos directory AFTER copying files,
+which overwrote the videos that were copied from your local directory.
+
+FIX APPLIED:
+Modified Dockerfile.cloudrun to NOT recreate the videos directory since it's already
+copied with the "COPY . ." command.
+
+NEXT STEPS:
+
+1. Make scripts executable:
+   chmod +x diagnose_videos.sh redeploy.sh test_videos.sh check_container.sh
+
+2. First, diagnose the current state (optional):
+   ./diagnose_videos.sh
+
+3. Redeploy with the fix:
+   ./redeploy.sh
+   
+   This will:
+   - Verify your local videos are present (214 files)
+   - Build and deploy using Cloud Build
+   - Take about 10-15 minutes
+
+4. After deployment, test the videos:
+   ./test_videos.sh
+   
+   This will check if common videos like hello.mp4, thank_you.mp4 are accessible.
+
+5. Check container logs if needed:
+   ./check_container.sh
+
+MANUAL COMMANDS (if you prefer):
+
+Redeploy:
+  gcloud builds submit --config cloudbuild.yaml .
+
+Test a video:
+  curl -I https://isl-translator-ggaxczmx5a-uc.a.run.app/videos/hello.mp4
+
+Check logs:
+  gcloud run services logs read isl-translator --region=us-central1 --limit=50
+
+ALTERNATIVE SOLUTION (if videos are still too large):
+
+If the Docker image becomes too large (>10GB), consider using Google Cloud Storage:
+
+1. Upload videos to GCS:
+   gsutil -m cp -r knowledge_base/videos gs://isl-translator-videos/
+
+2. Modify unified_app.py to serve from GCS instead of local files
+
+3. This would make deployments faster and reduce image size
+
+CURRENT STATUS:
+- Dockerfile.cloudrun: FIXED (removed mkdir for videos directory)
+- Local videos: 214 files present
+- Ready to redeploy
+
+Run: ./redeploy.sh

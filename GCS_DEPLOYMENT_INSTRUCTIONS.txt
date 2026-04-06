@@ -1,0 +1,79 @@
+╔════════════════════════════════════════════════════════════╗
+║   Google Cloud Storage Deployment - RECOMMENDED           ║
+╚════════════════════════════════════════════════════════════╝
+
+WHY USE GOOGLE CLOUD STORAGE (GCS)?
+✓ Faster deployments (videos uploaded once, not every deployment)
+✓ Smaller Docker images (from ~2GB to ~500MB)
+✓ Easy to add/update videos without redeploying the app
+✓ Better performance and scalability
+✓ No more "videos not loading" issues
+
+WHAT THIS DOES:
+1. Creates a GCS bucket: isl-translator-492416-videos
+2. Uploads all 214 videos to the bucket
+3. Makes videos publicly accessible
+4. Modifies app to serve videos from GCS
+5. Deploys lightweight Docker image to Cloud Run
+
+HOW TO DEPLOY:
+
+Option 1: ONE COMMAND (Recommended)
+────────────────────────────────────
+Copy and paste this into Cloud Shell:
+
+chmod +x deploy_with_gcs.sh && ./deploy_with_gcs.sh
+
+
+Option 2: MANUAL STEPS
+────────────────────────────────────
+If you prefer to do it step by step:
+
+# 1. Setup GCS and upload videos
+chmod +x setup_gcs_videos.sh
+./setup_gcs_videos.sh
+
+# 2. Deploy to Cloud Run
+gcloud builds submit --config cloudbuild.gcs.yaml .
+
+
+WHAT FILES WERE MODIFIED:
+────────────────────────────────────
+✓ unified_app.py - Now serves videos from GCS when USE_GCS=true
+✓ Dockerfile.cloudrun.gcs - Lightweight version without videos
+✓ cloudbuild.gcs.yaml - Build config with GCS environment variables
+
+
+AFTER DEPLOYMENT:
+────────────────────────────────────
+Your videos will be accessible at:
+https://storage.googleapis.com/isl-translator-492416-videos/videos/hello.mp4
+
+Your app will redirect /videos/hello.mp4 to the GCS URL automatically.
+
+
+TO ADD NEW VIDEOS LATER:
+────────────────────────────────────
+# Just upload to GCS, no need to redeploy!
+gsutil cp new_video.mp4 gs://isl-translator-492416-videos/videos/
+
+# Update metadata if needed
+gsutil cp knowledge_base/metadata.json gs://isl-translator-492416-videos/
+
+
+TROUBLESHOOTING:
+────────────────────────────────────
+If videos don't load:
+1. Check bucket is public:
+   gsutil iam get gs://isl-translator-492416-videos
+
+2. Test video URL directly:
+   curl -I https://storage.googleapis.com/isl-translator-492416-videos/videos/hello.mp4
+
+3. Check Cloud Run environment variables:
+   gcloud run services describe isl-translator --region=us-central1
+
+
+READY TO DEPLOY?
+────────────────────────────────────
+Run: chmod +x deploy_with_gcs.sh && ./deploy_with_gcs.sh

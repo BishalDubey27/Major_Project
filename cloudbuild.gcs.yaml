@@ -1,0 +1,41 @@
+steps:
+  # Build the container image using GCS Dockerfile
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '-f'
+      - 'Dockerfile.cloudrun.gcs'
+      - '-t'
+      - 'us-central1-docker.pkg.dev/$PROJECT_ID/isl-translator/app:latest'
+      - '.'
+
+  # Push to Artifact Registry
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'push'
+      - 'us-central1-docker.pkg.dev/$PROJECT_ID/isl-translator/app:latest'
+
+  # Deploy to Cloud Run with GCS environment variables
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: gcloud
+    args:
+      - 'run'
+      - 'deploy'
+      - 'isl-translator'
+      - '--image'
+      - 'us-central1-docker.pkg.dev/$PROJECT_ID/isl-translator/app:latest'
+      - '--region'
+      - 'us-central1'
+      - '--platform'
+      - 'managed'
+      - '--allow-unauthenticated'
+      - '--memory'
+      - '4Gi'
+      - '--cpu'
+      - '2'
+      - '--timeout'
+      - '300'
+      - '--set-env-vars'
+      - 'USE_GCS=true,GCS_BUCKET=isl-translator-492416-videos'
+
+timeout: 3600s

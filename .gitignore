@@ -26,9 +26,9 @@ wheels/
 *.egg
 MANIFEST
 
-# FAISS index (but keep metadata and config files)
-video_index.faiss
-index_map.json
+# FAISS index files - INCLUDE these in git for Cloud Run deployment
+# video_index.faiss
+# index_map.json
 
 # Keep these JSON files in version control:
 # - knowledge_base/metadata.json (required for video mapping)
@@ -38,9 +38,7 @@ index_map.json
 # IDE / Editor
 .vscode/
 
-# Generated audio files (keep folder structure but ignore contents)
-knowledge_base/generated_audio/*.mp3
-!knowledge_base/generated_audio/.gitkeep
+
 
 # Python cache
 *.pyc

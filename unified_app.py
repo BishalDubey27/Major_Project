@@ -60,7 +60,7 @@ ctc_continuous_recognizer = None
 
 def load_text_to_sign_components():
     """Load AI model and all necessary mappings for text-to-sign translation."""
-    global model, metadata_list, known_phrases_sorted, text_to_file_map, synonym_dict
+    global model, metadata_list, known_phrases_sorted, text_to_file_map, synonym_dict, faiss_index, index_map
     
     logger.info("🚀 Loading text-to-sign AI components...")
     
@@ -612,47 +612,49 @@ def get_video_playlist(query_text):
     original_query = remaining_query  # Keep copy for position tracking
 
     # --- Step 3: synonym expansion ---
-    for synonym, replacement in synonym_dict.items():
-        if synonym in remaining_query:
-            remaining_query = remaining_query.replace(synonym, replacement)
-            original_query = original_query.replace(synonym, replacement)
-            logger.info(f"📝 Applied synonym: '{synonym}' → '{replacement}'")
+    if synonym_dict:
+        for synonym, replacement in synonym_dict.items():
+            if synonym in remaining_query:
+                remaining_query = remaining_query.replace(synonym, replacement)
+                original_query = original_query.replace(synonym, replacement)
+                logger.info(f"📝 Applied synonym: '{synonym}' → '{replacement}'")
 
     # --- Step 4: greedy longest-match exact matching ---
-    for phrase in known_phrases_sorted:
-        start_idx = 0
-        while start_idx < len(remaining_query):
-            start_idx = remaining_query.find(phrase, start_idx)
-            if start_idx == -1:
-                break
+    if known_phrases_sorted and text_to_file_map:
+        for phrase in known_phrases_sorted:
+            start_idx = 0
+            while start_idx < len(remaining_query):
+                start_idx = remaining_query.find(phrase, start_idx)
+                if start_idx == -1:
+                    break
 
-            end_idx = start_idx + len(phrase)
-            if (start_idx == 0 or remaining_query[start_idx - 1] == ' ') and \
-               (end_idx == len(remaining_query) or remaining_query[end_idx] == ' '):
+                end_idx = start_idx + len(phrase)
+                if (start_idx == 0 or remaining_query[start_idx - 1] == ' ') and \
+                   (end_idx == len(remaining_query) or remaining_query[end_idx] == ' '):
 
-                original_position = original_query.find(phrase)
-                logger.info(f"✅ Exact match: '{phrase}' at position {original_position}")
-                filename = text_to_file_map[phrase]
+                    original_position = original_query.find(phrase)
+                    logger.info(f"✅ Exact match: '{phrase}' at position {original_position}")
+                    filename = text_to_file_map[phrase]
 
-                audio_filename = os.path.splitext(filename)[0].replace(' ', '_') + '.mp3'
-                audio_path = os.path.join('knowledge_base/generated_audio', audio_filename)
-                has_audio = os.path.exists(audio_path)
+                    audio_filename = os.path.splitext(filename)[0].replace(' ', '_') + '.mp3'
+                    audio_path = os.path.join('knowledge_base/generated_audio', audio_filename)
+                    has_audio = os.path.exists(audio_path)
 
-                playlist.append({
-                    "file": filename,
-                    "text": phrase,
-                    "score": 1.0,
-                    "match_type": "exact",
-                    "has_audio_file": has_audio,
-                    "audio_url": f"/audio/{audio_filename}" if has_audio else None,
-                    "position": original_position
-                })
+                    playlist.append({
+                        "file": filename,
+                        "text": phrase,
+                        "score": 1.0,
+                        "match_type": "exact",
+                        "has_audio_file": has_audio,
+                        "audio_url": f"/audio/{audio_filename}" if has_audio else None,
+                        "position": original_position
+                    })
 
-                remaining_query = remaining_query[:start_idx] + ' ' * len(phrase) + remaining_query[end_idx:]
-                original_query = original_query.replace(phrase, ' ' * len(phrase), 1)
-                start_idx += len(phrase)
-            else:
-                start_idx += 1
+                    remaining_query = remaining_query[:start_idx] + ' ' * len(phrase) + remaining_query[end_idx:]
+                    original_query = original_query.replace(phrase, ' ' * len(phrase), 1)
+                    start_idx += len(phrase)
+                else:
+                    start_idx += 1
 
     # --- Step 5: FAISS semantic fallback for unmatched words ---
     unmatched_words = [w for w in remaining_query.split() if len(w) >= 2]

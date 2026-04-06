@@ -28,6 +28,14 @@ echo "✅ Found $VIDEO_COUNT video files"
 echo "📁 Creating required directories..."
 mkdir -p uploads temp_audio knowledge_base/generated_audio
 
+# Check FAISS index (CRITICAL for /search endpoint)
+if [ ! -f "video_index.faiss" ] || [ ! -f "index_map.json" ]; then
+    echo "⚠️ FAISS index missing! Regenerating..."
+    python setup_database.py || (echo "❌ FAISS index generation failed!" && exit 1)
+fi
+
+echo "✅ FAISS index verified"
+
 # Generate audio files if missing (optional, can be done at runtime)
 AUDIO_COUNT=$(ls -1 knowledge_base/generated_audio/*.mp3 2>/dev/null | wc -l)
 echo "🎵 Found $AUDIO_COUNT audio files"

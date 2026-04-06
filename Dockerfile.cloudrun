@@ -36,6 +36,10 @@ RUN test -d knowledge_base/videos || (echo "ERROR: videos directory missing!" &&
 # Create necessary directories
 RUN mkdir -p uploads temp_audio knowledge_base/generated_audio
 
+# Generate FAISS index for semantic search (CRITICAL for /search endpoint)
+RUN python setup_database.py && \
+    test -f video_index.faiss || (echo "ERROR: FAISS index generation failed!" && exit 1)
+
 # Generate audio files for all videos at build time (optional but recommended)
 RUN python generate_audio_for_new_videos.py || echo "Warning: Could not pre-generate audio files"
 

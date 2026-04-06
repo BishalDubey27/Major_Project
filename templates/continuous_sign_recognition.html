@@ -6,11 +6,12 @@
     <title>Continuous Sign Recognition – ISL Translator</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/mobile-fixes.css">
     <style>
         * { font-family: 'Inter', sans-serif; }
 
         body {
-            background: #0F172A;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             min-height: 100vh;
             color: #F8FAFC;
         }
@@ -120,8 +121,8 @@
         .btn-blue:hover { background: #2563EB; }
         .btn-amber  { background: #F59E0B; color: #fff; }
         .btn-amber:hover{ background: #D97706; }
-        .btn-slate  { background: #334155; color: #CBD5E1; }
-        .btn-slate:hover{ background: #475569; }
+        .btn-slate  { background: rgba(255,255,255,0.2); color: #fff; }
+        .btn-slate:hover{ background: rgba(255,255,255,0.3); }
 
         /* ── timeline ────────────────────────── */
         .tl-item {
@@ -133,7 +134,7 @@
         }
 
         /* ── misc ────────────────────────────── */
-        .glass { background: rgba(30,41,59,.6); border: 1px solid #334155; }
+        .glass { background: rgba(255,255,255,0.15); border: 1px solid rgba(255,255,255,0.25); }
         .dot { width:10px; height:10px; border-radius:50%; display:inline-block; }
         .dot-green { background:#22C55E; }
         .dot-amber { background:#F59E0B; animation: blink 1s infinite; }
@@ -156,19 +157,22 @@
     <div class="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
         <div>
             <h1 class="text-xl font-bold tracking-tight">
-                Continuous Sign Recognition
-                <span class="ml-2 text-xs font-medium bg-emerald-500/20 text-emerald-400 px-2 py-0.5 rounded-full">
-                    SignGemma-style
-                </span>
+                ISL Translator
             </h1>
-            <p class="text-slate-400 text-sm mt-0.5">
+            <h2 class="text-lg font-semibold text-white/90 mt-1">
+                Sign to Speech
+                <span class="ml-2 text-xs font-medium bg-emerald-500/20 text-emerald-400 px-2 py-0.5 rounded-full">
+                    Continuous Mode
+                </span>
+            </h2>
+            <p class="text-slate-300 text-sm mt-1">
                 Sign continuously — the system detects boundaries &amp; builds a sentence in real time
             </p>
         </div>
-        <nav class="flex gap-2 text-sm">
+        <nav class="flex gap-2 text-sm flex-wrap">
             <a href="/" class="btn btn-slate">Text to Sign</a>
-            <a href="/live-sign-recognition" class="btn btn-slate">Single Shot</a>
-            <a href="/sign-recognition" class="btn btn-slate">Upload</a>
+            <a href="/sign-recognition" class="btn btn-slate">Upload Video</a>
+            <a href="/live-sign-recognition" class="btn btn-slate">Live Camera</a>
         </nav>
     </div>
 </header>

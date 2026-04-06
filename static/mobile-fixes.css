@@ -1,0 +1,374 @@
+/* Mobile-First Responsive Fixes for ISL Translator */
+
+/* ============================================
+   MOBILE BASE STYLES (< 640px)
+   ============================================ */
+@media (max-width: 640px) {
+    /* Reduce padding on mobile */
+    body {
+        padding: 0.5rem !important;
+    }
+    
+    /* Smaller headings on mobile */
+    h1 {
+        font-size: 1.5rem !important;
+        line-height: 2rem !important;
+    }
+    
+    h2 {
+        font-size: 1.25rem !important;
+        line-height: 1.75rem !important;
+    }
+    
+    /* Better button sizing for touch (44x44px minimum) */
+    button, .btn, a.btn {
+        min-height: 44px;
+        min-width: 44px;
+        padding: 0.75rem 1rem;
+        font-size: 0.875rem;
+    }
+    
+    /* Video container adjustments */
+    .video-container {
+        min-height: 250px !important;
+        padding: 1rem !important;
+    }
+    
+    #video-player {
+        max-height: 300px !important;
+    }
+    
+    /* Search panel mobile */
+    .search-container {
+        padding: 1rem !important;
+    }
+    
+    /* Example buttons grid */
+    .example-btn {
+        font-size: 0.75rem !important;
+        padding: 0.5rem 0.75rem !important;
+    }
+    
+    /* Navigation pills */
+    .glass-effect {
+        padding: 0.5rem 1rem !important;
+        font-size: 0.875rem !important;
+    }
+    
+    /* Camera feed */
+    #camera-wrapper {
+        height: auto !important;
+        aspect-ratio: 3/4;
+    }
+    
+    #camera-feed {
+        max-height: 400px !important;
+    }
+    
+    /* Results panel */
+    .glass {
+        padding: 1rem !important;
+    }
+    
+    /* Reduce gap spacing */
+    .gap-6 {
+        gap: 1rem !important;
+    }
+    
+    .gap-4 {
+        gap: 0.75rem !important;
+    }
+}
+
+/* ============================================
+   TABLET ADJUSTMENTS (641px - 1024px)
+   ============================================ */
+@media (min-width: 641px) and (max-width: 1024px) {
+    .video-container {
+        min-height: 350px;
+    }
+    
+    #video-player {
+        max-height: 400px;
+    }
+    
+    .search-container {
+        padding: 1.5rem;
+    }
+}
+
+/* ============================================
+   LANDSCAPE MOBILE (< 896px landscape)
+   ============================================ */
+@media (max-width: 896px) and (orientation: landscape) {
+    .video-container {
+        min-height: 200px !important;
+    }
+    
+    #video-player {
+        max-height: 250px !important;
+    }
+    
+    #camera-wrapper {
+        aspect-ratio: 16/9;
+        max-height: 300px;
+    }
+    
+    /* Reduce vertical spacing in landscape */
+    .mb-8 {
+        margin-bottom: 1rem !important;
+    }
+    
+    .mb-6 {
+        margin-bottom: 0.75rem !important;
+    }
+}
+
+/* ============================================
+   TOUCH DEVICE OPTIMIZATIONS
+   ============================================ */
+@media (hover: none) and (pointer: coarse) {
+    /* Increase touch targets to 48x48px (Apple HIG recommendation) */
+    button, a, input[type="button"], input[type="submit"], 
+    .btn, .example-btn, .nav-link {
+        min-height: 48px;
+        min-width: 48px;
+        padding: 0.75rem 1rem;
+    }
+    
+    /* Remove hover effects on touch devices */
+    .hover\:bg-white\/20:hover {
+        background-color: rgba(255, 255, 255, 0.1);
+    }
+    
+    .hover\:bg-blue-700:hover {
+        background-color: rgb(29, 78, 216);
+    }
+    
+    /* Larger tap targets for links */
+    a {
+        padding: 0.5rem;
+    }
+}
+
+/* ============================================
+   PREVENT HORIZONTAL SCROLL
+   ============================================ */
+* {
+    max-width: 100%;
+}
+
+html, body {
+    overflow-x: hidden;
+    position: relative;
+}
+
+/* ============================================
+   MOBILE FORM IMPROVEMENTS
+   ============================================ */
+@media (max-width: 640px) {
+    /* Prevent iOS zoom on input focus */
+    input[type="text"],
+    input[type="email"],
+    input[type="search"],
+    textarea,
+    select {
+        font-size: 16px !important;
+    }
+    
+    /* Better mobile input styling */
+    input, textarea {
+        -webkit-appearance: none;
+        border-radius: 0.5rem;
+    }
+    
+    /* File upload button */
+    input[type="file"] {
+        padding: 0.75rem;
+    }
+}
+
+/* ============================================
+   VIDEO PLAYER MOBILE OPTIMIZATIONS
+   ============================================ */
+@media (max-width: 768px) {
+    video {
+        width: 100% !important;
+        height: auto !important;
+        max-height: 300px;
+        object-fit: contain;
+    }
+    
+    .video-preview {
+        max-height: 250px !important;
+    }
+}
+
+/* ============================================
+   NAVIGATION MOBILE IMPROVEMENTS
+   ============================================ */
+@media (max-width: 640px) {
+    /* Stack navigation vertically on very small screens */
+    nav {
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+    
+    /* Full-width nav buttons on mobile */
+    nav a, nav button {
+        width: 100%;
+        text-align: center;
+    }
+}
+
+/* ============================================
+   GRID LAYOUT MOBILE FIXES
+   ============================================ */
+@media (max-width: 768px) {
+    /* Force single column on mobile */
+    .grid-cols-2 {
+        grid-template-columns: repeat(1, minmax(0, 1fr)) !important;
+    }
+    
+    /* Keep 2 columns for example buttons */
+    .example-btn {
+        grid-column: span 1;
+    }
+}
+
+/* ============================================
+   CAMERA FEED MOBILE OPTIMIZATIONS
+   ============================================ */
+@media (max-width: 640px) {
+    #camera-feed, #webcam {
+        width: 100% !important;
+        height: auto !important;
+        max-height: 400px;
+        border-radius: 0.75rem;
+    }
+    
+    .cam-wrapper {
+        aspect-ratio: 3/4;
+        max-height: 500px;
+    }
+}
+
+/* ============================================
+   MODAL/POPUP MOBILE FIXES
+   ============================================ */
+@media (max-width: 640px) {
+    .modal, .popup {
+        width: 95vw !important;
+        max-width: 95vw !important;
+        margin: 1rem auto;
+    }
+}
+
+/* ============================================
+   TEXT READABILITY
+   ============================================ */
+@media (max-width: 640px) {
+    /* Ensure minimum readable font size */
+    p, span, div {
+        font-size: 0.875rem;
+        line-height: 1.5;
+    }
+    
+    /* Larger text for important content */
+    .text-lg {
+        font-size: 1rem !important;
+    }
+    
+    .text-xl {
+        font-size: 1.125rem !important;
+    }
+}
+
+/* ============================================
+   LOADING STATES
+   ============================================ */
+.loader {
+    width: 40px;
+    height: 40px;
+}
+
+@media (max-width: 640px) {
+    .loader {
+        width: 30px;
+        height: 30px;
+    }
+}
+
+/* ============================================
+   ACCESSIBILITY IMPROVEMENTS
+   ============================================ */
+/* Focus visible for keyboard navigation */
+*:focus-visible {
+    outline: 2px solid #667eea;
+    outline-offset: 2px;
+}
+
+/* Skip to main content link */
+.skip-to-main {
+    position: absolute;
+    top: -40px;
+    left: 0;
+    background: #667eea;
+    color: white;
+    padding: 8px;
+    text-decoration: none;
+    z-index: 100;
+}
+
+.skip-to-main:focus {
+    top: 0;
+}
+
+/* ============================================
+   PERFORMANCE OPTIMIZATIONS
+   ============================================ */
+/* Reduce animations on mobile for better performance */
+@media (max-width: 640px) and (prefers-reduced-motion: no-preference) {
+    * {
+        animation-duration: 0.3s !important;
+        transition-duration: 0.2s !important;
+    }
+}
+
+/* Disable animations if user prefers reduced motion */
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+    }
+}
+
+/* ============================================
+   SAFE AREA INSETS (iPhone X+)
+   ============================================ */
+@supports (padding: max(0px)) {
+    body {
+        padding-left: max(0.5rem, env(safe-area-inset-left));
+        padding-right: max(0.5rem, env(safe-area-inset-right));
+        padding-bottom: max(0.5rem, env(safe-area-inset-bottom));
+    }
+}
+
+/* ============================================
+   PRINT STYLES
+   ============================================ */
+@media print {
+    /* Hide non-essential elements when printing */
+    nav, button, .glass-effect, video {
+        display: none !important;
+    }
+    
+    body {
+        background: white !important;
+        color: black !important;
+    }
+}

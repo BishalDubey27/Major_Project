@@ -6,13 +6,14 @@
     <title>Sign to Speech - ISL Translator</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/mobile-fixes.css">
     <!-- MediaPipe for landmark drawing -->
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/holistic/holistic.js" crossorigin="anonymous"></script>
     <style>
-        body { font-family: 'Inter', sans-serif; background: linear-gradient(135deg, #0f0c29, #302b63, #24243e); min-height: 100vh; }
-        .glass { background: rgba(255,255,255,0.08); backdrop-filter: blur(12px); border: 1px solid rgba(255,255,255,0.15); }
+        body { font-family: 'Inter', sans-serif; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; }
+        .glass { background: rgba(255,255,255,0.1); backdrop-filter: blur(12px); border: 1px solid rgba(255,255,255,0.2); }
         .tab-btn { transition: all 0.2s; }
         .tab-btn.active { background: rgba(99,102,241,0.8); border-color: rgba(99,102,241,1); }
         .tab-btn:not(.active) { background: rgba(255,255,255,0.08); border-color: rgba(255,255,255,0.2); }
@@ -33,22 +34,23 @@
 
     <!-- Header -->
     <div class="glass rounded-2xl p-5 mb-6 text-white">
-        <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-            <div>
-                <h1 class="text-2xl md:text-3xl font-bold">Sign to Speech</h1>
-                <p class="text-white/60 text-sm mt-1">Recognize Indian Sign Language from video or camera</p>
-            </div>
-            <div class="flex flex-wrap gap-2">
-                <a href="/" class="nav-link px-4 py-2 rounded-lg border border-white/20 text-white text-sm font-medium">
+        <div class="text-center mb-4">
+            <h1 class="text-3xl md:text-4xl font-bold mb-2">ISL Translator</h1>
+            <p class="text-xl md:text-2xl font-semibold text-white/90">Sign to Speech</p>
+            <p class="text-white/70 text-sm mt-2">Recognize Indian Sign Language from video or camera</p>
+        </div>
+        <div class="flex flex-col md:flex-row md:items-center md:justify-center gap-3 md:gap-4">
+            <div class="flex flex-wrap justify-center gap-2">
+                <a href="/" class="nav-link px-4 py-2 rounded-lg border border-white/30 text-white text-sm font-medium hover:bg-white/20 transition">
                     Text to Sign
                 </a>
-                <a href="/live-sign-recognition" class="nav-link px-4 py-2 rounded-lg border border-green-500/50 bg-green-500/20 text-white text-sm font-medium">
+                <a href="/live-sign-recognition" class="nav-link px-4 py-2 rounded-lg border border-white/30 text-white text-sm font-medium hover:bg-white/20 transition">
                     Live Camera
                 </a>
-                <a href="/continuous-sign-recognition" class="nav-link px-4 py-2 rounded-lg border border-purple-500/50 bg-purple-500/20 text-white text-sm font-medium">
+                <a href="/continuous-sign-recognition" class="nav-link px-4 py-2 rounded-lg border border-white/30 text-white text-sm font-medium hover:bg-white/20 transition">
                     Continuous Detection
                 </a>
-                <button id="demo-btn" class="nav-link px-4 py-2 rounded-lg border border-blue-500/50 bg-blue-500/20 text-white text-sm font-medium">
+                <button id="demo-btn" class="nav-link px-4 py-2 rounded-lg border border-blue-400/50 bg-blue-500/30 text-white text-sm font-medium hover:bg-blue-500/40 transition">
                     Try Demo
                 </button>
             </div>

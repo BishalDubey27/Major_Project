@@ -4,34 +4,39 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Live Sign Recognition</title>
+    <link rel="stylesheet" href="/static/mobile-fixes.css">
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
-        body { font-family: Arial, sans-serif; background: #1a1a2e; color: #eee; display: flex; flex-direction: column; align-items: center; min-height: 100vh; padding: 20px; }
+        body { font-family: Arial, sans-serif; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: #eee; display: flex; flex-direction: column; align-items: center; min-height: 100vh; padding: 20px; }
         h1 { margin: 20px 0 10px; color: #00d4ff; font-size: 1.8rem; }
-        #camera-wrapper { position: relative; width: 640px; height: 480px; border: 2px solid #00d4ff; border-radius: 8px; overflow: hidden; background: #000; }
+        #camera-wrapper { position: relative; width: 640px; height: 480px; border: 2px solid rgba(255,255,255,0.3); border-radius: 8px; overflow: hidden; background: #000; }
         #video  { position: absolute; top: 0; left: 0; width: 100%; height: 100%; transform: scaleX(-1); }
         #canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; transform: scaleX(-1); }
-        #prediction-box { margin-top: 20px; background: #16213e; border: 1px solid #00d4ff; border-radius: 8px; padding: 16px 40px; text-align: center; min-width: 400px; }
-        #prediction-label { font-size: 2rem; font-weight: bold; color: #00d4ff; min-height: 2.5rem; }
+        #prediction-box { margin-top: 20px; background: rgba(255,255,255,0.15); border: 1px solid rgba(255,255,255,0.3); border-radius: 8px; padding: 16px 40px; text-align: center; min-width: 400px; backdrop-filter: blur(10px); }
+        #prediction-label { font-size: 2rem; font-weight: bold; color: #fff; min-height: 2.5rem; }
         #status-msg { font-size: 0.9rem; color: #aaa; margin-top: 6px; }
         #status-bar { margin-top: 12px; font-size: 0.85rem; color: #888; }
         .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #888; margin-right: 6px; vertical-align: middle; }
         .dot.green { background: #00e676; } .dot.red { background: #ff1744; }
-        #record-btn { margin-top: 14px; padding: 12px 40px; background: #00d4ff; color: #000; border: none; border-radius: 8px; font-size: 1.1rem; font-weight: bold; cursor: pointer; }
+        #record-btn { margin-top: 14px; padding: 12px 40px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: #fff; border: none; border-radius: 8px; font-size: 1.1rem; font-weight: bold; cursor: pointer; transition: all 0.3s; }
         #record-btn:disabled { opacity: 0.5; cursor: not-allowed; }
         #record-btn.recording { background: #ff1744; color: #fff; animation: pulse 1s infinite; }
         @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.7} }
     </style>
 </head>
 <body>
-    <nav style="display:flex;gap:10px;margin-bottom:10px;">
-        <a href="/" style="padding:8px 16px;background:rgba(255,255,255,0.1);color:#fff;border-radius:8px;text-decoration:none;font-size:0.85rem;border:1px solid rgba(255,255,255,0.2);">Text to Sign</a>
-        <a href="/sign-recognition" style="padding:8px 16px;background:rgba(255,255,255,0.1);color:#fff;border-radius:8px;text-decoration:none;font-size:0.85rem;border:1px solid rgba(255,255,255,0.2);">Upload Video</a>
-        <a href="/live-sign-recognition" style="padding:8px 16px;background:rgba(0,212,255,0.2);color:#00d4ff;border-radius:8px;text-decoration:none;font-size:0.85rem;border:1px solid #00d4ff;">Live Camera</a>
-        <a href="/continuous-sign-recognition" style="padding:8px 16px;background:rgba(255,255,255,0.1);color:#fff;border-radius:8px;text-decoration:none;font-size:0.85rem;border:1px solid rgba(255,255,255,0.2);">Continuous</a>
+    <nav style="display:flex;gap:10px;margin-bottom:10px;flex-wrap:wrap;justify-content:center;">
+        <a href="/" style="padding:8px 16px;background:rgba(255,255,255,0.15);color:#fff;border-radius:8px;text-decoration:none;font-size:0.85rem;border:1px solid rgba(255,255,255,0.3);transition:all 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.25)'" onmouseout="this.style.background='rgba(255,255,255,0.15)'">Text to Sign</a>
+        <a href="/sign-recognition" style="padding:8px 16px;background:rgba(255,255,255,0.15);color:#fff;border-radius:8px;text-decoration:none;font-size:0.85rem;border:1px solid rgba(255,255,255,0.3);transition:all 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.25)'" onmouseout="this.style.background='rgba(255,255,255,0.15)'">Upload Video</a>
+        <a href="/live-sign-recognition" style="padding:8px 16px;background:rgba(255,255,255,0.25);color:#fff;border-radius:8px;text-decoration:none;font-size:0.85rem;border:2px solid rgba(255,255,255,0.5);font-weight:600;">Live Camera</a>
+        <a href="/continuous-sign-recognition" style="padding:8px 16px;background:rgba(255,255,255,0.15);color:#fff;border-radius:8px;text-decoration:none;font-size:0.85rem;border:1px solid rgba(255,255,255,0.3);transition:all 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.25)'" onmouseout="this.style.background='rgba(255,255,255,0.15)'">Continuous</a>
     </nav>
 
-    <h1>Live Sign Recognition</h1>
+    <div style="text-center mb-4">
+        <h1 style="color: #fff; font-size: 2rem; margin-bottom: 0.5rem; font-weight: bold;">ISL Translator</h1>
+        <h2 style="color: rgba(255,255,255,0.9); font-size: 1.5rem; margin-bottom: 0.25rem; font-weight: 600;">Sign to Speech</h2>
+        <p style="color: rgba(255,255,255,0.7); font-size: 0.9rem;">Live Sign Recognition</p>
+    </div>
 
     <div id="camera-wrapper">
         <video id="video" autoplay playsinline muted></video>

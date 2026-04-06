@@ -1,0 +1,55 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Git
+.git/
+.gitignore
+
+# Jupyter
+*.ipynb
+.ipynb_checkpoints/
+
+# Testing
+test_*.py
+debug_*.py
+
+# Documentation
+README.md
+*.md
+
+# Temporary files
+uploads/*
+temp_audio/*
+!uploads/.gitkeep
+!temp_audio/.gitkeep
+
+# Large model files (if not needed)
+# *.pth
+
+# Vercel deployment files
+vercel.json
+.vercelignore
+api/
+deploy-vercel.ps1
+requirements-vercel.txt
+unified_app_vercel.py
+VERCEL_DEPLOYMENT_GUIDE.md
+PLATFORM_COMPARISON.md
+
+# Other deployment files
+deploy.ps1
+deploy.sh
+cloudbuild.yaml

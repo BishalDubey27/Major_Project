@@ -992,16 +992,29 @@ def serve_temp_audio(filename):
 def get_stats():
     """Get system statistics"""
     try:
-        videos = len([f for f in os.listdir('knowledge_base/videos') if f.endswith('.mp4')])
-        audio_files = len([f for f in os.listdir('knowledge_base/generated_audio') if f.endswith('.mp3')])
+        videos_dir = 'knowledge_base/videos'
+        videos = []
+        video_count = 0
+        
+        if os.path.exists(videos_dir):
+            videos = [f for f in os.listdir(videos_dir) if f.endswith('.mp4')]
+            video_count = len(videos)
+        
+        audio_dir = 'knowledge_base/generated_audio'
+        audio_count = 0
+        if os.path.exists(audio_dir):
+            audio_count = len([f for f in os.listdir(audio_dir) if f.endswith('.mp3')])
         
         return jsonify({
-            "total_videos": videos,
-            "total_audio_files": audio_files,
+            "total_videos": video_count,
+            "total_audio_files": audio_count,
             "metadata_entries": len(metadata_list) if metadata_list else 0,
             "synonym_mappings": len(synonym_dict) if synonym_dict else 0,
             "text_to_sign_status": "ready" if model else "not_loaded",
-            "sign_to_speech_status": "ready" if sign_model_loaded else "demo_mode"
+            "sign_to_speech_status": "ready" if sign_model_loaded else "demo_mode",
+            "videos_directory_exists": os.path.exists(videos_dir),
+            "sample_videos": videos[:5] if videos else [],
+            "videos_path": os.path.abspath(videos_dir)
         })
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -1360,31 +1373,37 @@ def health_check():
 
 # ==================== MAIN ====================
 
+# Load components at module level (for Gunicorn)
+logger.info("="*70)
+logger.info("🎯 ISL RAG TRANSLATOR - UNIFIED SYSTEM")
+logger.info("   Complete Text-to-Sign & Sign-to-Speech Translation")
+logger.info("="*70)
+
+# Load text-to-sign components
+logger.info("🔄 Loading text-to-sign components...")
+text_to_sign_loaded = load_text_to_sign_components()
+
+if text_to_sign_loaded:
+    logger.info(f"✅ Text-to-sign ready with {len(metadata_list)} videos")
+else:
+    logger.error("❌ Text-to-sign failed to load")
+
+# Load sign-to-speech components
+logger.info("🔄 Loading sign-to-speech components...")
+sign_to_speech_loaded = load_sign_to_speech_components()
+
+if sign_to_speech_loaded:
+    logger.info("✅ Sign-to-speech model loaded")
+else:
+    logger.warning("🎭 Sign-to-speech running in demo mode")
+
+logger.info("="*70)
+
 if __name__ == '__main__':
     print("\n" + "="*70)
     print("🎯 ISL RAG TRANSLATOR - UNIFIED SYSTEM")
     print("   Complete Text-to-Sign & Sign-to-Speech Translation")
     print("="*70)
-    
-    # Load text-to-sign components
-    print("🔄 Loading text-to-sign components...")
-    text_to_sign_loaded = load_text_to_sign_components()
-    
-    if text_to_sign_loaded:
-        print(f"✅ Text-to-sign ready with {len(metadata_list)} videos")
-    else:
-        print("❌ Text-to-sign failed to load")
-    
-    # Load sign-to-speech components
-    print("🔄 Loading sign-to-speech components...")
-    sign_to_speech_loaded = load_sign_to_speech_components()
-    
-    if sign_to_speech_loaded:
-        print("✅ Sign-to-speech model loaded")
-    else:
-        print("🎭 Sign-to-speech running in demo mode")
-    
-    print("\n" + "="*70)
     print("🚀 SYSTEM READY!")
     print("="*70)
     print("📍 Main URL: http://127.0.0.1:5000")

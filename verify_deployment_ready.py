@@ -127,7 +127,7 @@ def main():
         print("="*70)
         print()
         print("Next steps:")
-        print("1. Run: bash deploy-cloudrun.sh")
+        print("1. Run: bash FINAL_DEPLOY.sh")
         print("2. Wait for deployment to complete")
         print("3. Test the deployed application")
         return 0

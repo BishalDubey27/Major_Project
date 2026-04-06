@@ -1,6 +1,12 @@
 steps:
   - name: 'gcr.io/cloud-builders/docker'
-    args: ['build', '-f', 'Dockerfile.cloudrun', '-t', 'gcr.io/$PROJECT_ID/isl-translator', '.']
+    args: 
+      - 'build'
+      - '-f'
+      - 'Dockerfile.cloudrun'
+      - '-t'
+      - 'gcr.io/$PROJECT_ID/isl-translator'
+      - '.'
 images:
   - 'gcr.io/$PROJECT_ID/isl-translator'
 timeout: 1200s

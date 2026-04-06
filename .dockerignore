@@ -54,4 +54,3 @@ PLATFORM_COMPARISON.md
 # Other deployment files
 deploy.ps1
 deploy.sh
-cloudbuild.yaml

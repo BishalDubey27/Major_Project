@@ -595,21 +595,25 @@ function handleServerResult(data) {
     /* update latest */
     if (data.action === 'added') {
         latestResult.innerHTML = `
+            <div class="text-4xl mb-1">✅</div>
             <div class="text-2xl font-bold text-white">${data.sign}</div>
             <div class="text-sm text-slate-400 mt-1">${(data.confidence*100).toFixed(1)}% confidence</div>
         `;
     } else if (data.action === 'filtered') {
         latestResult.innerHTML = `
+            <div class="text-3xl mb-1">⚠️</div>
             <div class="text-sm text-amber-400">Low confidence — filtered</div>
             <div class="text-xs text-slate-500 mt-1">${data.reason||''}</div>
         `;
     } else if (data.action === 'duplicate') {
         latestResult.innerHTML = `
+            <div class="text-3xl mb-1">🔁</div>
             <div class="text-sm text-slate-400">Duplicate — skipped</div>
             <div class="text-xs text-slate-500 mt-1">${data.reason||''}</div>
         `;
     } else if (data.action === 'cooldown') {
         latestResult.innerHTML = `
+            <div class="text-3xl mb-1">⏳</div>
             <div class="text-sm text-slate-400">Cooldown — too fast</div>
         `;
     }
@@ -705,7 +709,7 @@ window.addEventListener('beforeunload', () => {
         JSON.stringify({session_id:sessionId}));
 });
 
-console.log('Continuous Sign Recognition loaded');
+console.log('✋ Continuous Sign Recognition loaded');
 </script>
 </body>
 </html>

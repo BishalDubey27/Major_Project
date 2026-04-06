@@ -34,11 +34,11 @@
     <div class="max-w-4xl mx-auto">
         <!-- Header -->
         <div class="text-center mb-8">
-            <h1 class="text-4xl font-bold text-white mb-2">Contribute ISL Video</h1>
+            <h1 class="text-4xl font-bold text-white mb-2">📹 Contribute ISL Video</h1>
             <p class="text-white/80">Help expand the ISL knowledge base by contributing sign language videos</p>
             <div class="mt-4">
                 <a href="/" class="glass-effect px-6 py-2 rounded-full text-white hover:bg-white/20 transition inline-block">
-                    Back to Home
+                    ← Back to Home
                 </a>
             </div>
         </div>
@@ -103,14 +103,14 @@
                             id="recordBtn"
                             class="flex-1 px-6 py-3 bg-blue-500 hover:bg-blue-600 text-white rounded-lg font-semibold transition"
                         >
-                            Record Video
+                            🎥 Record Video
                         </button>
                         <button 
                             type="button" 
                             id="uploadBtn"
                             class="flex-1 px-6 py-3 bg-green-500 hover:bg-green-600 text-white rounded-lg font-semibold transition"
                         >
-                            Upload Video
+                            📁 Upload Video
                         </button>
                     </div>
 
@@ -132,7 +132,7 @@
                                 id="clearVideoBtn"
                                 class="px-4 py-2 bg-red-500 hover:bg-red-600 text-white rounded-lg text-sm"
                             >
-                                Clear Video
+                                ✕ Clear Video
                             </button>
                         </div>
                     </div>
@@ -146,7 +146,7 @@
                                 id="stopRecordBtn"
                                 class="px-6 py-3 bg-red-500 hover:bg-red-600 text-white rounded-lg font-semibold"
                             >
-                                Stop Recording
+                                ⏹️ Stop Recording
                             </button>
                         </div>
                     </div>
@@ -163,7 +163,7 @@
                         id="submitBtn"
                         class="px-8 py-4 bg-gradient-to-r from-green-500 to-blue-500 hover:from-green-600 hover:to-blue-600 text-white rounded-lg font-bold text-lg transition shadow-lg"
                     >
-                        Submit Contribution
+                        🚀 Submit Contribution
                     </button>
                 </div>
             </form>
@@ -247,7 +247,7 @@
                 
                 mediaRecorder.start();
                 recordBtn.classList.add('recording');
-                recordBtn.textContent = 'Recording...';
+                recordBtn.textContent = '🔴 Recording...';
                 
             } catch (error) {
                 alert('Camera access denied or not available: ' + error.message);
@@ -259,7 +259,7 @@
             if (mediaRecorder && mediaRecorder.state === 'recording') {
                 mediaRecorder.stop();
                 recordBtn.classList.remove('recording');
-                recordBtn.textContent = 'Record Video';
+                recordBtn.textContent = '🎥 Record Video';
             }
         });
 
@@ -297,7 +297,7 @@
                 const result = await response.json();
                 
                 if (result.success) {
-                    showStatus(result.message + ' Thank you for your contribution!', 'success');
+                    showStatus('✅ ' + result.message + ' Thank you for your contribution!', 'success');
                     
                     // Reset form after 2 seconds
                     setTimeout(() => {
@@ -308,10 +308,10 @@
                         statusMessage.classList.add('hidden');
                     }, 3000);
                 } else {
-                    showStatus((result.error || 'Upload failed'), 'error');
+                    showStatus('❌ ' + (result.error || 'Upload failed'), 'error');
                 }
             } catch (error) {
-                showStatus('Upload failed: ' + error.message, 'error');
+                showStatus('❌ Upload failed: ' + error.message, 'error');
             }
         });
 

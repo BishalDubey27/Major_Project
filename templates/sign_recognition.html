@@ -398,7 +398,7 @@
         mediaRecorder.start(100);
         recordBtn.classList.add('hidden');
         stopRecordBtn.classList.remove('hidden');
-        recordStatus.textContent = 'Recording... press Stop to analyze';
+        recordStatus.textContent = '⏺️ Recording... press Stop to analyze';
         recordStatus.classList.add('text-red-400');
     }
 
@@ -501,7 +501,7 @@
         if (recognitionResult) {
             navigator.clipboard.writeText(recognitionResult.recognized_text).then(() => {
                 const orig = copyTextBtn.textContent;
-                copyTextBtn.textContent = 'Copied!';
+                copyTextBtn.textContent = '✅ Copied!';
                 setTimeout(() => copyTextBtn.textContent = orig, 2000);
             });
         }
@@ -513,7 +513,7 @@
             const res = await fetch('/api/sign-recognition-status');
             const s = await res.json();
             if (s.model_loaded) {
-                modelStatus.textContent = `INCLUDE (${s.n_classes || 263} classes)`;
+                modelStatus.textContent = `✅ INCLUDE (${s.n_classes || 263} classes)`;
                 modelStatus.className = 'text-green-400';
             } else {
                 modelStatus.textContent = '❌ Not loaded';

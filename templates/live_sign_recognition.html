@@ -43,7 +43,10 @@
         <canvas id="canvas"></canvas>
     </div>
 
-    <button id="record-btn" disabled>Record Sign (3s)</button>
+    <div style="margin-top: 10px; display: flex; gap: 10px; justify-content: center;">
+        <button id="record-btn" disabled style="padding: 12px 40px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: #fff; border: none; border-radius: 8px; font-size: 1.1rem; font-weight: bold; cursor: pointer; transition: all 0.3s;">Record Sign (3s)</button>
+        <button id="switch-camera-btn" style="padding: 12px 20px; background: rgba(255,255,255,0.15); color: #fff; border: 1px solid rgba(255,255,255,0.3); border-radius: 8px; font-size: 1rem; cursor: pointer; transition: all 0.3s;">📷 Switch Camera</button>
+    </div>
 
     <div id="prediction-box">
         <div id="prediction-label">—</div>
@@ -67,6 +70,7 @@
     const predLabel   = document.getElementById('prediction-label');
     const statusMsg   = document.getElementById('status-msg');
     const recordBtn   = document.getElementById('record-btn');
+    const switchCameraBtn = document.getElementById('switch-camera-btn');
     const camDot      = document.getElementById('cam-dot');
     const camStatus   = document.getElementById('cam-status');
     const modelDot    = document.getElementById('model-dot');
@@ -75,6 +79,8 @@
     let cameraStream = null;
     let mediaRecorder = null;
     let chunks = [];
+    let currentFacingMode = 'user'; // 'user' = front camera, 'environment' = back camera
+    let mpCam = null;
 
     fetch('/api/sign-recognition-status').then(r=>r.json()).then(d=>{
         if(d.model_loaded){ modelDot.classList.add('green'); modelStatus.textContent=`Model: ready (${d.n_classes} classes)`; }
@@ -158,20 +164,50 @@
     });
 
     // ── Start camera ─────────────────────────────────────────────────────
-    navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480, facingMode: 'user' }, audio: false })
-        .then(stream => {
-            cameraStream = stream;
-            video.srcObject = stream;
+    async function startCamera(facingMode = 'user') {
+        try {
+            // Stop existing stream if any
+            if (cameraStream) {
+                cameraStream.getTracks().forEach(track => track.stop());
+            }
+            if (mpCam) {
+                mpCam.stop();
+            }
+
+            // Request camera with specified facing mode
+            cameraStream = await navigator.mediaDevices.getUserMedia({ 
+                video: { width: 640, height: 480, facingMode: facingMode }, 
+                audio: false 
+            });
+            
+            video.srcObject = cameraStream;
+            camDot.classList.remove('red');
             camDot.classList.add('green');
-            camStatus.textContent = 'Camera: active';
+            camStatus.textContent = `Camera: ${facingMode === 'user' ? 'Front' : 'Back'}`;
             recordBtn.disabled = false;
-            const mpCam = new Camera(video, { onFrame: async () => { await holistic.send({ image: video }); }, width: 640, height: 480 });
+            
+            mpCam = new Camera(video, { 
+                onFrame: async () => { await holistic.send({ image: video }); }, 
+                width: 640, 
+                height: 480 
+            });
             mpCam.start();
-        })
-        .catch(err => {
+        } catch (err) {
+            camDot.classList.remove('green');
             camDot.classList.add('red');
             camStatus.textContent = 'Camera failed: ' + err.message;
-        });
+            console.error('Camera error:', err);
+        }
+    }
+
+    // ── Switch camera button ─────────────────────────────────────────────
+    switchCameraBtn.addEventListener('click', () => {
+        currentFacingMode = currentFacingMode === 'user' ? 'environment' : 'user';
+        startCamera(currentFacingMode);
+    });
+
+    // Start with front camera
+    startCamera('user');
     </script>
 </body>
 </html>

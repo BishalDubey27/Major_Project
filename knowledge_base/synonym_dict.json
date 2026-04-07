@@ -1,11 +1,20 @@
 {
   "hi": "hello",
   "hey": "hello",
+  "hii": "hello",
+  "hiii": "hello",
+  "helo": "hello",
+  "hola": "hello",
   "bye": "goodbye",
   "thanks": "thank you",
   "thx": "thank you",
+  "ty": "thank you",
   "mom": "mother",
   "dad": "father",
   "bro": "brother",
-  "sis": "sister"
+  "sis": "sister",
+  "abode": "house",
+  "home": "house",
+  "residence": "house",
+  "dwelling": "house"
 }

@@ -195,44 +195,24 @@ html, body {
     video {
         width: 100% !important;
         height: auto !important;
-        max-height: 300px;
+        max-height: 60vh !important; /* Use viewport height for better mobile sizing */
         object-fit: contain;
     }
     
     .video-preview {
-        max-height: 250px !important;
-    }
-}
-
-/* ============================================
-   NAVIGATION MOBILE IMPROVEMENTS
-   ============================================ */
-@media (max-width: 640px) {
-    /* Stack navigation vertically on very small screens */
-    nav {
-        flex-direction: column;
-        gap: 0.5rem;
+        max-height: 50vh !important;
     }
     
-    /* Full-width nav buttons on mobile */
-    nav a, nav button {
-        width: 100%;
-        text-align: center;
-    }
-}
-
-/* ============================================
-   GRID LAYOUT MOBILE FIXES
-   ============================================ */
-@media (max-width: 768px) {
-    /* Force single column on mobile */
-    .grid-cols-2 {
-        grid-template-columns: repeat(1, minmax(0, 1fr)) !important;
+    /* Video container should take most of screen */
+    #video-player {
+        width: 100% !important;
+        max-height: 60vh !important;
+        min-height: 250px;
     }
     
-    /* Keep 2 columns for example buttons */
-    .example-btn {
-        grid-column: span 1;
+    /* Playlist videos */
+    .playlist-video {
+        max-height: 40vh !important;
     }
 }
 
@@ -240,16 +220,70 @@ html, body {
    CAMERA FEED MOBILE OPTIMIZATIONS
    ============================================ */
 @media (max-width: 640px) {
-    #camera-feed, #webcam {
+    #camera-wrapper {
         width: 100% !important;
+        max-width: 100% !important;
         height: auto !important;
-        max-height: 400px;
+        aspect-ratio: 4/3 !important;
+        max-height: 60vh;
+    }
+    
+    #camera-feed, #webcam, #video {
+        width: 100% !important;
+        height: 100% !important;
+        max-height: 60vh;
         border-radius: 0.75rem;
+        object-fit: cover;
     }
     
     .cam-wrapper {
-        aspect-ratio: 3/4;
-        max-height: 500px;
+        aspect-ratio: 4/3 !important;
+        max-height: 60vh !important;
+        width: 100% !important;
+    }
+    
+    /* Canvas overlay */
+    #canvas {
+        width: 100% !important;
+        height: 100% !important;
+    }
+}
+
+/* ============================================
+   BUTTON SIZING FOR MOBILE
+   ============================================ */
+@media (max-width: 640px) {
+    /* Better button sizing for touch (44x44px minimum) */
+    button, .btn, a.btn {
+        min-height: 44px;
+        min-width: 44px;
+        padding: 0.625rem 1rem !important; /* Reduced padding */
+        font-size: 0.875rem !important; /* Smaller text */
+    }
+    
+    /* Record button specific */
+    #record-btn {
+        padding: 0.75rem 1.5rem !important;
+        font-size: 0.9rem !important;
+    }
+    
+    /* Switch camera button */
+    #switch-camera-btn {
+        padding: 0.75rem 1rem !important;
+        font-size: 0.85rem !important;
+    }
+    
+    /* Navigation buttons */
+    nav a, nav button {
+        padding: 0.5rem 0.75rem !important;
+        font-size: 0.75rem !important;
+        white-space: nowrap;
+    }
+    
+    /* Example buttons */
+    .example-btn {
+        font-size: 0.7rem !important;
+        padding: 0.4rem 0.6rem !important;
     }
 }
 
@@ -370,5 +404,59 @@ html, body {
     body {
         background: white !important;
         color: black !important;
+    }
+}
+
+
+/* ============================================
+   ADDITIONAL MOBILE FIXES FOR UI
+   ============================================ */
+@media (max-width: 640px) {
+    /* Navigation improvements */
+    nav {
+        flex-wrap: wrap;
+        gap: 0.375rem !important;
+        justify-content: center;
+    }
+    
+    nav a, nav button {
+        padding: 0.5rem 0.75rem !important;
+        font-size: 0.75rem !important;
+        white-space: nowrap;
+        flex: 0 1 auto;
+    }
+    
+    /* Prediction box mobile */
+    #prediction-box {
+        min-width: auto !important;
+        width: 100% !important;
+        padding: 1rem 1.5rem !important;
+    }
+    
+    #prediction-label {
+        font-size: 1.5rem !important;
+    }
+    
+    #status-msg {
+        font-size: 0.8rem !important;
+    }
+    
+    /* Button container */
+    div[style*="display: flex"] {
+        flex-wrap: wrap !important;
+        gap: 0.5rem !important;
+    }
+}
+
+/* ============================================
+   LANDSCAPE ORIENTATION FIXES
+   ============================================ */
+@media (max-width: 896px) and (orientation: landscape) {
+    #camera-wrapper {
+        max-height: 50vh !important;
+    }
+    
+    video {
+        max-height: 50vh !important;
     }
 }

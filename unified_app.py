@@ -48,7 +48,7 @@ synonym_dict = None
 # Global variables for FAISS semantic search
 faiss_index = None
 index_map = None
-FAISS_SCORE_THRESHOLD = 0.4  # Minimum similarity score for semantic matches
+FAISS_SCORE_THRESHOLD = float(os.environ.get('FAISS_THRESHOLD', '0.5'))  # Lowered to 0.5 for better semantic matching
 
 # Global variables for sign-to-speech
 sign_recognizer = None
@@ -607,6 +607,13 @@ def get_video_playlist(query_text):
     Returns a playlist sorted by position in the original query.
     """
     logger.info(f"🔍 Searching for: '{query_text}'")
+    
+    # Debug: Check if components are loaded
+    logger.info(f"🔧 DEBUG: known_phrases_sorted is {'None' if known_phrases_sorted is None else f'loaded with {len(known_phrases_sorted)} phrases'}")
+    logger.info(f"🔧 DEBUG: text_to_file_map is {'None' if text_to_file_map is None else f'loaded with {len(text_to_file_map)} mappings'}")
+    logger.info(f"🔧 DEBUG: synonym_dict is {'None' if synonym_dict is None else f'loaded with {len(synonym_dict)} synonyms'}")
+    logger.info(f"🔧 DEBUG: faiss_index is {'None' if faiss_index is None else f'loaded with {faiss_index.ntotal} vectors'}")
+    
     playlist = []
 
     # --- Step 1: NLP preprocessing (before punctuation cleanup!) ---
@@ -622,14 +629,22 @@ def get_video_playlist(query_text):
 
     # --- Step 3: synonym expansion ---
     if synonym_dict:
+        logger.info(f"📝 Checking synonyms in: '{remaining_query}'")
         for synonym, replacement in synonym_dict.items():
             if synonym in remaining_query:
                 remaining_query = remaining_query.replace(synonym, replacement)
                 original_query = original_query.replace(synonym, replacement)
-                logger.info(f"📝 Applied synonym: '{synonym}' → '{replacement}'")
+                logger.info(f"✅ Applied synonym: '{synonym}' → '{replacement}'")
+        logger.info(f"📝 After synonym expansion: '{remaining_query}'")
+    else:
+        logger.warning("⚠️ synonym_dict is None, skipping synonym expansion")
 
     # --- Step 4: greedy longest-match exact matching ---
     if known_phrases_sorted and text_to_file_map:
+        logger.info(f"🔎 Starting exact match with {len(known_phrases_sorted)} known phrases")
+        logger.info(f"🔎 First 10 phrases: {known_phrases_sorted[:10]}")
+        logger.info(f"🔎 Searching in: '{remaining_query}'")
+        
         for phrase in known_phrases_sorted:
             start_idx = 0
             while start_idx < len(remaining_query):
@@ -664,6 +679,8 @@ def get_video_playlist(query_text):
                     start_idx += len(phrase)
                 else:
                     start_idx += 1
+    else:
+        logger.error(f"❌ Cannot perform exact match: known_phrases_sorted={'None' if known_phrases_sorted is None else 'OK'}, text_to_file_map={'None' if text_to_file_map is None else 'OK'}")
 
     # --- Step 5: FAISS semantic fallback for unmatched words ---
     unmatched_words = [w for w in remaining_query.split() if len(w) >= 2]
@@ -675,23 +692,31 @@ def get_video_playlist(query_text):
             results = faiss_semantic_search(word, top_k=1)
             for r in results:
                 if r['text'] not in already_matched:
-                    audio_fn = os.path.splitext(r['file'])[0].replace(' ', '_') + '.mp3'
-                    audio_path = os.path.join('knowledge_base/generated_audio', audio_fn)
-                    has_audio = os.path.exists(audio_path)
+                    # Log the semantic match for debugging
+                    logger.info(f"🧠 Semantic match candidate: '{word}' → '{r['text']}' (score: {r['score']})")
+                    
+                    # Accept semantic matches with score >= 0.5 (50% similarity)
+                    # This allows "abode" → "house", "hi" → "hello" type matches
+                    if r['score'] >= 0.5:
+                        audio_fn = os.path.splitext(r['file'])[0].replace(' ', '_') + '.mp3'
+                        audio_path = os.path.join('knowledge_base/generated_audio', audio_fn)
+                        has_audio = os.path.exists(audio_path)
 
-                    pos = query_text.lower().find(word)
-                    playlist.append({
-                        "file": r['file'],
-                        "text": r['text'],
-                        "score": r['score'],
-                        "match_type": "semantic",
-                        "original_word": word,
-                        "has_audio_file": has_audio,
-                        "audio_url": f"/audio/{audio_fn}" if has_audio else None,
-                        "position": pos if pos != -1 else len(query_text)
-                    })
-                    already_matched.add(r['text'])
-                    logger.info(f"🧠 Semantic match: '{word}' → '{r['text']}' (score: {r['score']})")
+                        pos = query_text.lower().find(word)
+                        playlist.append({
+                            "file": r['file'],
+                            "text": r['text'],
+                            "score": r['score'],
+                            "match_type": "semantic",
+                            "original_word": word,
+                            "has_audio_file": has_audio,
+                            "audio_url": f"/audio/{audio_fn}" if has_audio else None,
+                            "position": pos if pos != -1 else len(query_text)
+                        })
+                        already_matched.add(r['text'])
+                        logger.info(f"✅ Semantic match accepted: '{word}' → '{r['text']}' (score: {r['score']})")
+                    else:
+                        logger.info(f"❌ Semantic match rejected: '{word}' → '{r['text']}' (score too low: {r['score']})")
 
     # --- Step 6: sort by position to maintain word order ---
     playlist.sort(key=lambda x: x.get('position', 0))

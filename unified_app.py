@@ -1164,8 +1164,9 @@ def contribute_video():
             # Reload text-to-sign components to include new video
             load_text_to_sign_components()
             
-            # Rebuild FAISS index so semantic search includes the new video
-            rebuild_faiss_index()
+            # Rebuild FAISS index asynchronously so semantic search includes the new video without blocking
+            import threading
+            threading.Thread(target=rebuild_faiss_index).start()
             
             return jsonify({
                 'success': True,
@@ -1194,11 +1195,12 @@ def contribute_video():
 
 @app.route('/api/rebuild-index', methods=['POST'])
 def api_rebuild_index():
-    """Rebuild FAISS index from current metadata (useful after adding new videos)"""
+    """Rebuild FAISS index asynchronously from current metadata (useful after adding new videos)"""
     try:
-        success = rebuild_faiss_index()
-        if success:
-            return jsonify({"success": True, "message": f"FAISS index rebuilt with {faiss_index.ntotal} vectors"})
+        import threading
+        threading.Thread(target=rebuild_faiss_index).start()
+        return jsonify({"success": True, "message": "FAISS index rebuild triggered asynchronously in the background."})
+    except Exception as e:
         return jsonify({"success": False, "message": "Rebuild failed — check logs"}), 500
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500

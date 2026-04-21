@@ -144,22 +144,31 @@
 
     // ── MediaPipe landmark overlay only (no inference from JS landmarks) ──
     const holistic = new Holistic({ locateFile: f => `https://cdn.jsdelivr.net/npm/@mediapipe/holistic/${f}` });
-    holistic.setOptions({ modelComplexity: 1, smoothLandmarks: true, enableSegmentation: false, refineFaceLandmarks: false, minDetectionConfidence: 0.5, minTrackingConfidence: 0.5 });
+    holistic.setOptions({ modelComplexity: 1, smoothLandmarks: true, enableSegmentation: false, refineFaceLandmarks: true, minDetectionConfidence: 0.5, minTrackingConfidence: 0.5 });
     holistic.onResults(results => {
         canvas.width  = video.videoWidth  || 640;
         canvas.height = video.videoHeight || 480;
         ctx.clearRect(0, 0, canvas.width, canvas.height);
-        if (results.poseLandmarks) {
-            drawConnectors(ctx, results.poseLandmarks, POSE_CONNECTIONS, { color: '#00d4ff', lineWidth: 2 });
-            drawLandmarks(ctx, results.poseLandmarks, { color: '#fff', fillColor: '#00d4ff', lineWidth: 1, radius: 3 });
+        
+        // Face Mesh (subtle)
+        if (results.faceLandmarks) {
+            drawConnectors(ctx, results.faceLandmarks, FACEMESH_TESSELATION, { color: 'rgba(255, 255, 255, 0.15)', lineWidth: 1 });
         }
+        
+        // Pose
+        if (results.poseLandmarks) {
+            drawConnectors(ctx, results.poseLandmarks, POSE_CONNECTIONS, { color: '#00d4ff', lineWidth: 3 });
+            drawLandmarks(ctx, results.poseLandmarks, { color: '#ffffff', fillColor: '#00d4ff', lineWidth: 2, radius: 4 });
+        }
+        
+        // Hands
         if (results.leftHandLandmarks) {
-            drawConnectors(ctx, results.leftHandLandmarks, HAND_CONNECTIONS, { color: '#00e676', lineWidth: 2 });
-            drawLandmarks(ctx, results.leftHandLandmarks, { color: '#fff', fillColor: '#00e676', lineWidth: 1, radius: 4 });
+            drawConnectors(ctx, results.leftHandLandmarks, HAND_CONNECTIONS, { color: '#00e676', lineWidth: 3 });
+            drawLandmarks(ctx, results.leftHandLandmarks, { color: '#ffffff', fillColor: '#00e676', lineWidth: 2, radius: 5 });
         }
         if (results.rightHandLandmarks) {
-            drawConnectors(ctx, results.rightHandLandmarks, HAND_CONNECTIONS, { color: '#ff6d00', lineWidth: 2 });
-            drawLandmarks(ctx, results.rightHandLandmarks, { color: '#fff', fillColor: '#ff6d00', lineWidth: 1, radius: 4 });
+            drawConnectors(ctx, results.rightHandLandmarks, HAND_CONNECTIONS, { color: '#ff6d00', lineWidth: 3 });
+            drawLandmarks(ctx, results.rightHandLandmarks, { color: '#ffffff', fillColor: '#ff6d00', lineWidth: 2, radius: 5 });
         }
     });
 

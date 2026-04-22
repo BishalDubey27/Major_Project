@@ -6,12 +6,17 @@ from sentence_transformers import SentenceTransformer
 print("Initializing sentence-transformer model...")
 model = SentenceTransformer('all-MiniLM-L6-v2')
 
-print("Loading video metadata from knowledge_base/metadata.json...")
-with open('knowledge_base/metadata.json', 'r') as f:
-    metadata = json.load(f)
+import sqlite3
 
-texts = [item['text'] for item in metadata]
-filenames = [item['file'] for item in metadata]
+print("Connecting to SQLite database...")
+conn = sqlite3.connect('knowledge_base/isl_database.db')
+cursor = conn.cursor()
+cursor.execute('SELECT text, file FROM video_metadata')
+rows = cursor.fetchall()
+
+texts = [row[0] for row in rows]
+filenames = [row[1] for row in rows]
+conn.close()
 
 print(f"Found {len(texts)} text phrases to encode.")
 print("Encoding text phrases into vectors... (This may take a moment)")

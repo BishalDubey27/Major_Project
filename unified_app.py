@@ -11,6 +11,7 @@ import uuid
 import logging
 import tempfile
 import re
+import sqlite3
 from datetime import datetime
 import numpy as np
 import torch
@@ -19,6 +20,7 @@ from sentence_transformers import SentenceTransformer
 from flask import Flask, render_template, jsonify, request, send_from_directory
 from werkzeug.utils import secure_filename
 from gtts import gTTS
+import threading
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -69,34 +71,35 @@ def load_text_to_sign_components():
         model = SentenceTransformer('all-MiniLM-L6-v2')
         logger.info("✅ Sentence transformer model loaded")
         
-        # Load metadata
-        meta_path = 'knowledge_base/metadata.json'
-        if not os.path.exists(meta_path):
-            raise FileNotFoundError(f"Metadata file not found at {meta_path}")
+        # Load metadata from SQLite
+        db_path = 'knowledge_base/isl_database.db'
+        if not os.path.exists(db_path):
+            raise FileNotFoundError(f"Database not found at {db_path}")
         
-        with open(meta_path, 'r', encoding='utf-8') as f:
-            metadata_list = json.load(f)
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        cursor.execute('SELECT text, file FROM video_metadata')
+        rows = cursor.fetchall()
+        metadata_list = [{"text": row[0], "file": row[1]} for row in rows]
+        conn.close()
         
-        logger.info(f"📹 Found {len(metadata_list)} available video phrases")
+        logger.info(f"📹 Found {len(metadata_list)} available video phrases in DB")
         
-        # Create helper mappings - CRITICAL: These must be populated
+        # Create helper mappings
         known_phrases_sorted = sorted([item['text'].lower() for item in metadata_list], key=len, reverse=True)
         text_to_file_map = {item['text'].lower(): item['file'] for item in metadata_list}
         
         logger.info(f"📋 Created {len(known_phrases_sorted)} phrase mappings")
-        logger.info(f"📋 Sample phrases: {known_phrases_sorted[:5]}")
         
-        # Load synonyms (optional)
+        # Load synonyms
         synonym_path = 'knowledge_base/synonym_dict.json'
         synonym_dict = {}
         if os.path.exists(synonym_path):
             with open(synonym_path, 'r', encoding='utf-8') as f:
                 synonym_dict = json.load(f)
             logger.info(f"📝 Loaded {len(synonym_dict)} synonym mappings")
-        else:
-            logger.info("📝 No synonym dictionary found, using empty dict")
         
-        # Load FAISS index for semantic search fallback
+        # Load FAISS index
         faiss_path = 'video_index.faiss'
         index_map_path = 'index_map.json'
         if os.path.exists(faiss_path) and os.path.exists(index_map_path):
@@ -105,12 +108,7 @@ def load_text_to_sign_components():
                 index_map = json.load(f)
             index_map = {int(k): v for k, v in index_map.items()}
             logger.info(f"🔍 FAISS index loaded with {faiss_index.ntotal} vectors")
-        else:
-            logger.warning("⚠️ FAISS index not found - run setup_database.py to enable semantic search")
         
-        logger.info("✅ Text-to-sign components loaded successfully!")
-        logger.info(f"✅ known_phrases_sorted has {len(known_phrases_sorted) if known_phrases_sorted else 0} entries")
-        logger.info(f"✅ text_to_file_map has {len(text_to_file_map) if text_to_file_map else 0} entries")
         return True
         
     except Exception as e:
@@ -506,7 +504,49 @@ def nlp_preprocess(text):
     words = [w for w in words if w not in ISL_DROP_WORDS]
     processed = ' '.join(words)
 
+    # --- Step 3: simple ISL grammar mapping (SOV) ---
+    processed = translate_to_isl_grammar(processed)
+
     return processed
+
+def translate_to_isl_grammar(text):
+    """
+    Basic rule-based ISL grammar mapping (Subject-Object-Verb).
+    Moves WH-question words to the end.
+    Drops standalone 'to be' and auxiliary verbs (do, does, did).
+    Moves negation to the end (Verb + Not).
+    """
+    words = text.split()
+    if not words:
+        return text
+    
+    wh_words = {'what', 'when', 'where', 'who', 'why', 'how', 'which'}
+    to_be_verbs = {'is', 'am', 'are', 'was', 'were', 'be', 'been', 'being'}
+    auxiliary_verbs = {'do', 'does', 'did', 'can', 'could', 'should', 'would', 'will', 'shall', 'may', 'might', 'must'}
+    negation_words = {'not', 'no', 'never', 'dont', 'doesnt', 'didnt', "don't", "doesn't", "didn't"}
+    
+    # 1. Remove 'to be' and 'do/does/did' auxiliary verbs
+    # Note: we keep other auxiliaries like 'can' if they add meaning, but ISL often signs them at the end.
+    words = [w for w in words if w not in to_be_verbs and w not in {'do', 'does', 'did'}]
+    
+    # 2. Extract special categories
+    found_wh = [w for w in words if w in wh_words]
+    found_negation = [w for w in words if w in negation_words]
+    found_aux = [w for w in words if w in auxiliary_verbs and w not in {'do', 'does', 'did'}]
+    other_words = [w for w in words if w not in wh_words and w not in negation_words and w not in auxiliary_verbs]
+    
+    # 3. Basic reordering: Subject + Object + Verb
+    if len(other_words) >= 3:
+        subject = other_words[0]
+        verb = other_words[1]
+        object_parts = other_words[2:]
+        reordered_others = [subject] + object_parts + [verb]
+    else:
+        reordered_others = other_words
+    
+    # ISL structure often ends with Aux/Negation/WH
+    final_sequence = reordered_others + found_aux + found_negation + found_wh
+    return ' '.join(final_sequence)
 
 
 # ==================== FAISS SEMANTIC SEARCH ====================
@@ -562,13 +602,17 @@ def rebuild_faiss_index():
     """
     global faiss_index, index_map
 
-    if model is None or metadata_list is None:
-        logger.warning("Cannot rebuild FAISS: model or metadata not loaded")
-        return False
-
     try:
-        texts = [item['text'] for item in metadata_list]
-        filenames = [item['file'] for item in metadata_list]
+        # Load fresh metadata from SQLite
+        db_path = 'knowledge_base/isl_database.db'
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        cursor.execute('SELECT text, file FROM video_metadata')
+        rows = cursor.fetchall()
+        conn.close()
+
+        texts = [row[0] for row in rows]
+        filenames = [row[1] for row in rows]
 
         embeddings = model.encode(texts, convert_to_numpy=True)
         dim = embeddings.shape[1]
@@ -592,6 +636,15 @@ def rebuild_faiss_index():
     except Exception as e:
         logger.error(f"FAISS rebuild failed: {e}")
         return False
+
+def rebuild_faiss_index_async():
+    """
+    Wrapper to run FAISS rebuild in a background thread to prevent blocking.
+    """
+    thread = threading.Thread(target=rebuild_faiss_index)
+    thread.daemon = True
+    thread.start()
+    logger.info("🧵 Started background thread for FAISS index rebuild.")
 
 
 # ==================== ENHANCED SEARCH PIPELINE ====================
@@ -1120,46 +1173,29 @@ def contribute_video():
         except Exception as e:
             logger.error(f"Failed to generate audio: {e}")
         
-        # Update metadata.json
+        # Update SQLite database
         try:
-            metadata_path = 'knowledge_base/metadata.json'
-            
-            # Load existing metadata
-            if os.path.exists(metadata_path):
-                with open(metadata_path, 'r') as f:
-                    metadata = json.load(f)
-            else:
-                metadata = []
+            db_path = 'knowledge_base/isl_database.db'
+            conn = sqlite3.connect(db_path)
+            cursor = conn.cursor()
             
             # Check if phrase already exists
-            existing_entry = next((item for item in metadata if item.get('text', '').lower() == phrase), None)
+            cursor.execute('SELECT id FROM video_metadata WHERE text = ?', (phrase,))
+            existing = cursor.fetchone()
             
-            if existing_entry:
+            if existing:
                 # Update existing entry
-                existing_entry['file'] = video_filename
-                existing_entry['text'] = phrase
-                existing_entry['description'] = description or existing_entry.get('description', '')
-                existing_entry['updated_by'] = contributor_name
-                existing_entry['updated_at'] = datetime.now().isoformat()
+                cursor.execute('UPDATE video_metadata SET file = ? WHERE text = ?', (video_filename, phrase))
                 message = f"Updated existing video for '{phrase}'"
             else:
                 # Add new entry
-                new_entry = {
-                    'file': video_filename,
-                    'text': phrase,
-                    'description': description,
-                    'contributor': contributor_name,
-                    'contributed_at': datetime.now().isoformat(),
-                    'category': 'user_contributed'
-                }
-                metadata.append(new_entry)
+                cursor.execute('INSERT INTO video_metadata (file, text) VALUES (?, ?)', (video_filename, phrase))
                 message = f"Added new video for '{phrase}'"
             
-            # Save updated metadata
-            with open(metadata_path, 'w') as f:
-                json.dump(metadata, f, indent=2)
+            conn.commit()
+            conn.close()
             
-            logger.info(f"Updated metadata.json: {message}")
+            logger.info(f"Updated SQLite database: {message}")
             
             # Reload text-to-sign components to include new video
             load_text_to_sign_components()
@@ -1415,23 +1451,25 @@ logger.info("🎯 ISL RAG TRANSLATOR - UNIFIED SYSTEM")
 logger.info("   Complete Text-to-Sign & Sign-to-Speech Translation")
 logger.info("="*70)
 
-# Load text-to-sign components
-logger.info("🔄 Loading text-to-sign components...")
-text_to_sign_loaded = load_text_to_sign_components()
-
-if text_to_sign_loaded:
-    logger.info(f"✅ Text-to-sign ready with {len(metadata_list)} videos")
-else:
-    logger.error("❌ Text-to-sign failed to load")
-
-# Load sign-to-speech components
-logger.info("🔄 Loading sign-to-speech components...")
-sign_to_speech_loaded = load_sign_to_speech_components()
-
-if sign_to_speech_loaded:
-    logger.info("✅ Sign-to-speech model loaded")
-else:
-    logger.warning("🎭 Sign-to-speech running in demo mode")
+# Load components if not in a testing environment
+if os.environ.get('SKIP_LOAD_COMPONENTS') != 'true':
+    # Load text-to-sign components
+    logger.info("🔄 Loading text-to-sign components...")
+    text_to_sign_loaded = load_text_to_sign_components()
+    
+    if text_to_sign_loaded:
+        logger.info(f"✅ Text-to-sign ready with {len(metadata_list)} videos")
+    else:
+        logger.error("❌ Text-to-sign failed to load")
+    
+    # Load sign-to-speech components
+    logger.info("🔄 Loading sign-to-speech components...")
+    sign_to_speech_loaded = load_sign_to_speech_components()
+    
+    if sign_to_speech_loaded:
+        logger.info("✅ Sign-to-speech model loaded")
+    else:
+        logger.warning("🎭 Sign-to-speech running in demo mode")
 
 logger.info("="*70)
 

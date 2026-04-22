@@ -7,12 +7,7 @@ Complete text-to-sign and sign-to-speech translation system
 import os
 import json
 
-# Download model from HF Hub if not present locally
-try:
-    from download_model import download_model_if_needed
-    download_model_if_needed()
-except Exception as e:
-    print(f"Model download skipped: {e}")
+# Model is bundled locally in INCLUDE/include_no_cnn_transformer_small.pth
 import string
 import uuid
 import logging
@@ -118,10 +113,10 @@ def load_text_to_sign_components():
         return False
 
 def load_sign_to_speech_components():
-    """Load the CNN+LSTM model for sign-to-speech translation."""
+    """Load the INCLUDE transformer model for sign-to-speech translation."""
     global sign_recognizer, sign_model_loaded
 
-    logger.info("Loading CNN+LSTM sign recognition model...")
+    logger.info("Loading INCLUDE transformer model...")
 
     try:
         import sys
@@ -131,59 +126,41 @@ def load_sign_to_speech_components():
         if project_root not in sys.path:
             sys.path.insert(0, project_root)
 
-        from INCLUDE.models.lstm import LSTM
-        from INCLUDE.configs import LstmConfig, CnnConfig
+        from INCLUDE.models.transformer import Transformer
+        from INCLUDE.configs import TransformerConfig
 
-        model_path = os.path.join(project_root, 'INCLUDE', 'cnn_augs_lstm.pth')
-        label_map_path = os.path.join(project_root, 'INCLUDE', 'label_maps', 'label_map_include.json')
+        # Prefer the 81% accurate model, fall back to 64% model
+        possible_model_paths = [
+            os.path.join(project_root, 'INCLUDE', 'include_no_cnn_transformer_small.pth'),
+            os.path.join(project_root, 'augs_transformer.pth'),
+        ]
 
-        if not os.path.exists(model_path):
-            logger.error(f"Model file not found: {model_path}")
+        model_path = None
+        for path in possible_model_paths:
+            if os.path.exists(path):
+                model_path = path
+                logger.info(f"Found model at: {model_path}")
+                break
+
+        if not model_path:
+            logger.error(f"No model file found. Tried: {possible_model_paths}")
             sign_model_loaded = False
             return False
+
+        # Use 263-class label map for include_no_cnn model, 50-class for augs_transformer
+        if 'include_no_cnn' in model_path:
+            label_map_path = os.path.join(project_root, 'INCLUDE', 'label_maps', 'label_map_include.json')
+            n_classes_expected = 263
+        else:
+            label_map_path = os.path.join(project_root, 'INCLUDE', 'label_maps', 'label_map_include50.json')
+            n_classes_expected = 50
 
         with open(label_map_path, 'r') as f:
             label_map = _json.load(f)
 
         idx_to_label = {v: k for k, v in label_map.items()}
-        n_classes = len(label_map)  # 263
-
-        config = LstmConfig()
-        config.input_size = CnnConfig.output_dim  # 1280 CNN features
-
-        model_obj = LSTM(config=config, n_classes=n_classes)
-        checkpoint = torch.load(model_path, map_location='cpu', weights_only=False)
-        state = checkpoint['model'] if 'model' in checkpoint else checkpoint
-        state = {k.replace('module.', ''): v for k, v in state.items()}
-        model_obj.load_state_dict(state)
-        model_obj.eval()
-
-        sign_recognizer = {
-            'model': model_obj,
-            'idx_to_label': idx_to_label,
-            'label_map': label_map,
-            'n_classes': n_classes,
-            'model_type': 'cnn_lstm',
-        }
-        sign_model_loaded = True
-        logger.info(f"CNN+LSTM model loaded — {n_classes} classes, score={checkpoint.get('score', 'N/A')}")
-        return True
-
-    except Exception as e:
-        logger.error(f"Failed to load CNN+LSTM model: {e}")
-        sign_model_loaded = False
-        return False
-
-        if not os.path.exists(model_path):
-            logger.error(f"Model file not found: {model_path}")
-            sign_model_loaded = False
-            return False
-
-        with open(label_map_path, 'r') as f:
-            label_map = _json.load(f)
-
-        idx_to_label = {v: k for k, v in label_map.items()}
-        n_classes = len(label_map)  # 263
+        n_classes = len(label_map)
+        logger.info(f"Using label map with {n_classes} classes")
 
         config = TransformerConfig(size='small')
         model_obj = Transformer(config=config, n_classes=n_classes)
@@ -206,6 +183,8 @@ def load_sign_to_speech_components():
 
     except Exception as e:
         logger.error(f"Failed to load INCLUDE model: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
         sign_model_loaded = False
         return False
 
@@ -653,83 +632,115 @@ def get_video_playlist(query_text):
     """
     Enhanced search pipeline:
       1. NLP preprocessing   — expand contractions, remove articles
-      2. Synonym expansion   — apply synonym_dict
+      2. Synonym expansion   — apply synonym_dict (multi-word aware)
       3. Greedy exact match  — longest-first phrase matching
-      4. FAISS fallback      — semantic search for unmatched words
-      5. Hybrid scoring      — exact=1.0, semantic=model score
+      4. FAISS phrase-level  — try full unmatched phrase before splitting words
+      5. FAISS word-level    — semantic search per unmatched word
     Returns a playlist sorted by position in the original query.
     """
     logger.info(f"🔍 Searching for: '{query_text}'")
+    logger.info(f"🔧 phrases: {len(known_phrases_sorted) if known_phrases_sorted else 'NONE'}, synonyms: {len(synonym_dict) if synonym_dict else 'NONE'}, faiss: {'loaded' if faiss_index else 'NONE'}")
     playlist = []
 
-    # --- Step 1: NLP preprocessing (before punctuation cleanup!) ---
+    # --- Step 1: NLP preprocessing ---
     preprocessed = nlp_preprocess(query_text)
     logger.info(f"📝 After NLP preprocessing: '{preprocessed}'")
 
     # --- Step 2: clean punctuation ---
     space_maker = str.maketrans(string.punctuation, ' ' * len(string.punctuation))
     remaining_query = preprocessed.translate(space_maker).strip()
-    # Collapse multiple spaces
     remaining_query = re.sub(r'\s+', ' ', remaining_query)
-    original_query = remaining_query  # Keep copy for position tracking
+    original_query = remaining_query
 
-    # --- Step 3: synonym expansion ---
-    for synonym, replacement in synonym_dict.items():
-        if synonym in remaining_query:
-            remaining_query = remaining_query.replace(synonym, replacement)
-            original_query = original_query.replace(synonym, replacement)
-            logger.info(f"📝 Applied synonym: '{synonym}' → '{replacement}'")
+    # --- Step 3: synonym expansion (multi-word phrases first, then single words) ---
+    if synonym_dict:
+        # Sort synonyms longest-first so "good morning" matches before "good"
+        for synonym in sorted(synonym_dict.keys(), key=len, reverse=True):
+            replacement = synonym_dict[synonym]
+            pattern = r'\b' + re.escape(synonym) + r'\b'
+            if re.search(pattern, remaining_query):
+                remaining_query = re.sub(pattern, replacement, remaining_query)
+                original_query = re.sub(pattern, replacement, original_query)
+                logger.info(f"📝 Synonym: '{synonym}' → '{replacement}' | query now: '{remaining_query}'")
 
     # --- Step 4: greedy longest-match exact matching ---
-    for phrase in known_phrases_sorted:
-        start_idx = 0
-        while start_idx < len(remaining_query):
-            start_idx = remaining_query.find(phrase, start_idx)
-            if start_idx == -1:
-                break
+    if known_phrases_sorted and text_to_file_map:
+        for phrase in known_phrases_sorted:
+            start_idx = 0
+            while start_idx < len(remaining_query):
+                start_idx = remaining_query.find(phrase, start_idx)
+                if start_idx == -1:
+                    break
 
-            end_idx = start_idx + len(phrase)
-            if (start_idx == 0 or remaining_query[start_idx - 1] == ' ') and \
-               (end_idx == len(remaining_query) or remaining_query[end_idx] == ' '):
+                end_idx = start_idx + len(phrase)
+                if (start_idx == 0 or remaining_query[start_idx - 1] == ' ') and \
+                   (end_idx == len(remaining_query) or remaining_query[end_idx] == ' '):
 
-                original_position = original_query.find(phrase)
-                logger.info(f"✅ Exact match: '{phrase}' at position {original_position}")
-                filename = text_to_file_map[phrase]
+                    original_position = original_query.find(phrase)
+                    logger.info(f"✅ Exact match: '{phrase}' at position {original_position}")
+                    filename = text_to_file_map[phrase]
 
-                audio_filename = os.path.splitext(filename)[0].replace(' ', '_') + '.mp3'
-                audio_path = os.path.join('knowledge_base/generated_audio', audio_filename)
-                has_audio = os.path.exists(audio_path)
+                    audio_filename = os.path.splitext(filename)[0].replace(' ', '_') + '.mp3'
+                    audio_path = os.path.join('knowledge_base/generated_audio', audio_filename)
+                    has_audio = os.path.exists(audio_path)
 
-                playlist.append({
-                    "file": filename,
-                    "text": phrase,
-                    "score": 1.0,
-                    "match_type": "exact",
-                    "has_audio_file": has_audio,
-                    "audio_url": f"/audio/{audio_filename}" if has_audio else None,
-                    "position": original_position
-                })
+                    playlist.append({
+                        "file": filename,
+                        "text": phrase,
+                        "score": 1.0,
+                        "match_type": "exact",
+                        "has_audio_file": has_audio,
+                        "audio_url": f"/audio/{audio_filename}" if has_audio else None,
+                        "position": original_position
+                    })
 
-                remaining_query = remaining_query[:start_idx] + ' ' * len(phrase) + remaining_query[end_idx:]
-                original_query = original_query.replace(phrase, ' ' * len(phrase), 1)
-                start_idx += len(phrase)
-            else:
-                start_idx += 1
+                    remaining_query = remaining_query[:start_idx] + ' ' * len(phrase) + remaining_query[end_idx:]
+                    original_query = original_query.replace(phrase, ' ' * len(phrase), 1)
+                    start_idx += len(phrase)
+                else:
+                    start_idx += 1
 
-    # --- Step 5: FAISS semantic fallback for unmatched words ---
+    # --- Step 5: FAISS semantic fallback ---
     unmatched_words = [w for w in remaining_query.split() if len(w) >= 2]
     if unmatched_words and faiss_index is not None:
-        logger.info(f"🔎 FAISS fallback for unmatched: {unmatched_words}")
         already_matched = {item['text'] for item in playlist}
 
-        for word in unmatched_words:
-            results = faiss_semantic_search(word, top_k=1)
-            for r in results:
-                if r['text'] not in already_matched:
+        # 5a: Try the full unmatched phrase first (e.g. "good morning" → "hello")
+        unmatched_phrase = ' '.join(unmatched_words)
+        if len(unmatched_words) > 1:
+            logger.info(f"🔎 FAISS phrase search: '{unmatched_phrase}'")
+            phrase_results = faiss_semantic_search(unmatched_phrase, top_k=3)
+            logger.info(f"🔎 Phrase results: {[(r['text'], r['score']) for r in phrase_results]}")
+            for r in phrase_results:
+                if r['text'] not in already_matched and r['score'] >= FAISS_SCORE_THRESHOLD:
                     audio_fn = os.path.splitext(r['file'])[0].replace(' ', '_') + '.mp3'
                     audio_path = os.path.join('knowledge_base/generated_audio', audio_fn)
                     has_audio = os.path.exists(audio_path)
+                    playlist.append({
+                        "file": r['file'],
+                        "text": r['text'],
+                        "score": r['score'],
+                        "match_type": "semantic",
+                        "original_word": unmatched_phrase,
+                        "has_audio_file": has_audio,
+                        "audio_url": f"/audio/{audio_fn}" if has_audio else None,
+                        "position": 0
+                    })
+                    already_matched.add(r['text'])
+                    logger.info(f"✅ Phrase semantic match: '{unmatched_phrase}' → '{r['text']}' (score: {r['score']})")
+                    # Mark all unmatched words as consumed
+                    unmatched_words = []
+                    break
 
+        # 5b: Per-word FAISS fallback for remaining unmatched words
+        for word in unmatched_words:
+            results = faiss_semantic_search(word, top_k=3)
+            logger.info(f"🔎 Word FAISS '{word}': {[(r['text'], r['score']) for r in results]}")
+            for r in results:
+                if r['text'] not in already_matched and r['score'] >= FAISS_SCORE_THRESHOLD:
+                    audio_fn = os.path.splitext(r['file'])[0].replace(' ', '_') + '.mp3'
+                    audio_path = os.path.join('knowledge_base/generated_audio', audio_fn)
+                    has_audio = os.path.exists(audio_path)
                     pos = query_text.lower().find(word)
                     playlist.append({
                         "file": r['file'],
@@ -742,11 +753,11 @@ def get_video_playlist(query_text):
                         "position": pos if pos != -1 else len(query_text)
                     })
                     already_matched.add(r['text'])
-                    logger.info(f"🧠 Semantic match: '{word}' → '{r['text']}' (score: {r['score']})")
+                    logger.info(f"✅ Word semantic match: '{word}' → '{r['text']}' (score: {r['score']})")
+                    break
 
-    # --- Step 6: sort by position to maintain word order ---
+    # --- Step 6: sort by position ---
     playlist.sort(key=lambda x: x.get('position', 0))
-
     logger.info(f"📜 Final playlist: {[(p['text'], p['match_type'], p['score']) for p in playlist]}")
     return playlist
 
@@ -1380,45 +1391,44 @@ def health_check():
 # ==================== MAIN ====================
 
 if __name__ == '__main__':
+    import sys
+    sys.stdout.reconfigure(encoding='utf-8', errors='replace')
     print("\n" + "="*70)
-    print("🎯 ISL RAG TRANSLATOR - UNIFIED SYSTEM")
+    print("ISL RAG TRANSLATOR - UNIFIED SYSTEM")
     print("   Complete Text-to-Sign & Sign-to-Speech Translation")
     print("="*70)
     
     # Load text-to-sign components
-    print("🔄 Loading text-to-sign components...")
+    print("Loading text-to-sign components...")
     text_to_sign_loaded = load_text_to_sign_components()
     
     if text_to_sign_loaded:
-        print(f"✅ Text-to-sign ready with {len(metadata_list)} videos")
+        print(f"Text-to-sign ready with {len(metadata_list)} videos")
     else:
-        print("❌ Text-to-sign failed to load")
+        print("Text-to-sign failed to load")
     
     # Load sign-to-speech components
-    print("🔄 Loading sign-to-speech components...")
+    print("Loading sign-to-speech components...")
     sign_to_speech_loaded = load_sign_to_speech_components()
     
     if sign_to_speech_loaded:
-        print("✅ Sign-to-speech model loaded")
+        print("Sign-to-speech model loaded")
     else:
-        print("🎭 Sign-to-speech running in demo mode")
+        print("Sign-to-speech running in demo mode")
     
     print("\n" + "="*70)
-    print("🚀 SYSTEM READY!")
+    print("SYSTEM READY!")
     print("="*70)
     
     # Get port from environment variable (Cloud Run compatibility)
     port = int(os.environ.get('PORT', 5000))
     host = os.environ.get('HOST', '0.0.0.0')
     
-    print(f"📍 Main URL: http://{host}:{port}")
-    print(f"🔤 Text-to-Sign: http://{host}:{port}/")
-    print(f"🎥 Sign-to-Speech: http://{host}:{port}/sign-recognition")
-    print(f"✋ Continuous: http://{host}:{port}/continuous-sign-recognition")
-    print(f"📊 System Stats: http://{host}:{port}/api/stats")
-    print(f"💚 Health Check: http://{host}:{port}/health")
-    print("="*70)
-    print("⏹️ Press Ctrl+C to stop the server")
+    print(f"Main URL: http://{host}:{port}")
+    print(f"Text-to-Sign: http://{host}:{port}/")
+    print(f"Sign-to-Speech: http://{host}:{port}/sign-recognition")
+    print(f"Stats: http://{host}:{port}/api/stats")
+    print(f"Health: http://{host}:{port}/health")
     print("="*70)
     
     # Start Flask app

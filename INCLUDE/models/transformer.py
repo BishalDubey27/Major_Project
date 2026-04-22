@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import transformers
+from transformers.models.bert.modeling_bert import BertLayer as TransformersBertLayer
 
 
 class PositionEmbedding(nn.Module):
@@ -40,7 +40,7 @@ class Transformer(nn.Module):
         self.embedding = PositionEmbedding(config)
         self.layers = nn.ModuleList(
             [
-                transformers.BertLayer(config.model_config)
+                TransformersBertLayer(config.model_config)
                 for _ in range(config.num_hidden_layers)
             ]
         )

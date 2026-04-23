@@ -953,7 +953,7 @@ def recognize_from_keypoints():
 
 @app.route('/upload-sign-video', methods=['POST'])
 def upload_sign_video():
-    """Handle sign video upload and recognition using INCLUDE50 transformer."""
+    """Handle sign video upload and recognition using INCLUDE transformer (keypoint-based)."""
     start_time = datetime.now()
 
     if not sign_model_loaded:
@@ -977,12 +977,13 @@ def upload_sign_video():
         logger.info(f"Video saved: {file_path} ({file_size} bytes)")
 
         try:
-            features = _extract_cnn_features_from_video(file_path)
-            n_frames = len(features)
-            logger.info(f"CNN features extracted: {n_frames} frames")
+            # Use keypoint extraction (matches include_no_cnn_transformer_small.pth)
+            pose_x, pose_y, h1_x, h1_y, h2_x, h2_y = _extract_keypoints_from_video(file_path)
+            n_frames = len(pose_x)
+            logger.info(f"Keypoints extracted: {n_frames} frames")
             if n_frames == 0:
                 return jsonify({'success': False, 'error': 'No frames extracted from video'}), 400
-            tensor = _cnn_features_to_tensor(features)
+            tensor = _keypoints_to_tensor(pose_x, pose_y, h1_x, h1_y, h2_x, h2_y)
             predicted_text, confidence = run_include_inference(tensor)
             logger.info(f"Sign recognized: {predicted_text} ({confidence:.2f})")
         finally:
@@ -994,7 +995,7 @@ def upload_sign_video():
                 'success': True,
                 'recognized_text': None,
                 'confidence': float(confidence),
-                'message': f'Low confidence ({confidence:.1%}) — ensure hands are clearly visible and sign is from INCLUDE50 dataset',
+                'message': f'Low confidence ({confidence:.1%}) — ensure hands are clearly visible',
                 'is_demo': False
             })
 
@@ -1012,6 +1013,8 @@ def upload_sign_video():
 
     except Exception as e:
         logger.error(f"Upload processing failed: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
         return jsonify({'success': False, 'error': 'Sign recognition failed', 'details': str(e)}), 500
 
 @app.route('/temp-audio/<filename>')

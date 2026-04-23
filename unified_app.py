@@ -517,7 +517,9 @@ CONTRACTION_MAP = {
 }
 
 # Articles that ISL does not sign — safe to remove
-ISL_DROP_WORDS = {'a', 'an', 'the'}
+ISL_DROP_WORDS = {'a', 'an', 'the', 'i', 'am', 'is', 'are', 'was', 'were',
+                  'need', 'want', 'go', 'to', 'please', 'my', 'me', 'we',
+                  'do', 'did', 'have', 'has', 'get', 'got'}
 
 
 def nlp_preprocess(text):

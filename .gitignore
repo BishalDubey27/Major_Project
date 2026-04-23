@@ -31,6 +31,14 @@ MANIFEST
 # Exclude only generated/runtime json files, not config files
 index_map.json
 
+# Model weights - too large for GitHub (>100MB)
+*.pth
+
+# Keypoint folders - generated locally, too large for GitHub
+keypoint/
+keypoint_50/
+keypoint_augs_transformer/
+
 # IDE / Editor
 .vscode/
 

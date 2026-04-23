@@ -62,7 +62,7 @@ ctc_continuous_recognizer = None
 
 def load_text_to_sign_components():
     """Load AI model and all necessary mappings for text-to-sign translation."""
-    global model, metadata_list, known_phrases_sorted, text_to_file_map, synonym_dict
+    global model, metadata_list, known_phrases_sorted, text_to_file_map, synonym_dict, faiss_index, index_map
     
     logger.info("🚀 Loading text-to-sign AI components...")
     
@@ -72,7 +72,8 @@ def load_text_to_sign_components():
         logger.info("✅ Sentence transformer model loaded")
         
         # Load metadata
-        meta_path = 'knowledge_base/metadata.json'
+        _base = os.path.dirname(os.path.abspath(__file__))
+        meta_path = os.path.join(_base, 'knowledge_base', 'metadata.json')
         if not os.path.exists(meta_path):
             raise FileNotFoundError(f"Metadata file not found at {meta_path}")
         
@@ -86,7 +87,7 @@ def load_text_to_sign_components():
         text_to_file_map = {item['text'].lower(): item['file'] for item in metadata_list}
         
         # Load synonyms (optional)
-        synonym_path = 'knowledge_base/synonym_dict.json'
+        synonym_path = os.path.join(_base, 'knowledge_base', 'synonym_dict.json')
         synonym_dict = {}
         if os.path.exists(synonym_path):
             with open(synonym_path, 'r', encoding='utf-8') as f:
@@ -94,8 +95,8 @@ def load_text_to_sign_components():
             logger.info(f"📝 Loaded {len(synonym_dict)} synonym mappings")
         
         # Load FAISS index for semantic search fallback
-        faiss_path = 'video_index.faiss'
-        index_map_path = 'index_map.json'
+        faiss_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'video_index.faiss')
+        index_map_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'index_map.json')
         if os.path.exists(faiss_path) and os.path.exists(index_map_path):
             faiss_index = faiss.read_index(faiss_path)
             with open(index_map_path, 'r') as f:

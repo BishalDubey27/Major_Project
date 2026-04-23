@@ -28,7 +28,8 @@ MANIFEST
 
 # FAISS index and other generated files
 *.faiss
-*.json
+# Exclude only generated/runtime json files, not config files
+index_map.json
 
 # IDE / Editor
 .vscode/

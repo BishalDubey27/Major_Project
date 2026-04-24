@@ -129,11 +129,15 @@ class KeypointsDataset(data.Dataset):
             .astype(np.float32)
         )
         final_data = np.concatenate((pose, h1, h2), -1)
-        final_data = np.pad(
-            final_data,
-            ((0, self.max_frame_len - final_data.shape[0]), (0, 0)),
-            "constant",
-        )
+        # Truncate if longer than max_frame_len, then pad if shorter
+        if final_data.shape[0] > self.max_frame_len:
+            final_data = final_data[:self.max_frame_len]
+        else:
+            final_data = np.pad(
+                final_data,
+                ((0, self.max_frame_len - final_data.shape[0]), (0, 0)),
+                "constant",
+            )
         # normalize to zero mean unit variance
         mean = final_data.mean()
         std  = final_data.std() + 1e-8

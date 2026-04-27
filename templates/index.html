@@ -490,22 +490,39 @@
             currentPhrase.textContent = video.text;
             videoStatus.textContent = `Video ${currentVideoIndex + 1} of ${currentPlaylist.length}`;
             
-            // Mute video and play
+            // Stop any currently playing audio
+            audioPlayer.pause();
+            audioPlayer.currentTime = 0;
+
+            // Mute video (audio comes from TTS audio player)
             videoPlayer.muted = true;
-            videoPlayer.play().catch(e => console.log('Video autoplay prevented'));
-            
-            // Play audio for this video
+
             if (video.audio_url) {
-                setTimeout(() => {
-                    audioPlayer.src = video.audio_url;
-                    audioPlayer.play().catch(e => console.log('Audio autoplay prevented:', e));
-                }, 500);
+                // Play audio first, then start video when audio begins
+                audioPlayer.src = video.audio_url;
+                audioPlayer.load();
+                const playPromise = audioPlayer.play();
+                if (playPromise !== undefined) {
+                    playPromise.then(() => {
+                        // Audio started — now play video in sync
+                        videoPlayer.play().catch(e => console.log('Video play error:', e));
+                    }).catch(e => {
+                        // Autoplay blocked — play video anyway, audio will play on next interaction
+                        console.log('Audio autoplay blocked:', e);
+                        videoPlayer.play().catch(e2 => console.log('Video play error:', e2));
+                    });
+                }
+            } else {
+                // No audio — just play video
+                videoPlayer.play().catch(e => console.log('Video play error:', e));
             }
         }
 
         function playNextVideo() {
             if (currentVideoIndex < currentPlaylist.length - 1) {
                 currentVideoIndex++;
+                audioPlayer.pause();
+                audioPlayer.currentTime = 0;
                 playVideo(currentPlaylist[currentVideoIndex]);
             }
         }

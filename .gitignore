@@ -42,9 +42,6 @@ keypoint_augs_transformer/
 # IDE / Editor
 .vscode/
 
-# Generated audio files
-knowledge_base/generated_audio/
-
 # Python cache
 *.pyc
 *.pyo

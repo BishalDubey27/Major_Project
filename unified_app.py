@@ -518,7 +518,9 @@ CONTRACTION_MAP = {
 }
 
 # Articles and filler words that ISL does not sign — safe to remove
-ISL_DROP_WORDS = {'a', 'an', 'the', 'i', 'am', 'is', 'was', 'were',
+# Note: 'is' and 'are' kept because they're part of key phrases like
+# 'what is your name', 'how are you'
+ISL_DROP_WORDS = {'a', 'an', 'the', 'i', 'am', 'was', 'were',
                   'need', 'want', 'go', 'to', 'please', 'my', 'me', 'we',
                   'do', 'did', 'have', 'has', 'get', 'got'}
 

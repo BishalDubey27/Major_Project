@@ -517,8 +517,8 @@ CONTRACTION_MAP = {
     "let's": "let us", "how's": "how is", "who've": "who have",
 }
 
-# Articles that ISL does not sign — safe to remove
-ISL_DROP_WORDS = {'a', 'an', 'the', 'i', 'am', 'is', 'are', 'was', 'were',
+# Articles and filler words that ISL does not sign — safe to remove
+ISL_DROP_WORDS = {'a', 'an', 'the', 'i', 'am', 'is', 'was', 'were',
                   'need', 'want', 'go', 'to', 'please', 'my', 'me', 'we',
                   'do', 'did', 'have', 'has', 'get', 'got'}
 

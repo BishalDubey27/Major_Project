@@ -7,7 +7,7 @@ Complete text-to-sign and sign-to-speech translation system
 import os
 import json
 
-# Model is bundled locally in INCLUDE/include_no_cnn_transformer_small.pth
+# Model is bundled locally in include_no_cnn_transformer_small_improved.pth (45% accuracy, 263 classes)
 import string
 import uuid
 import logging
@@ -130,8 +130,9 @@ def load_sign_to_speech_components():
         from INCLUDE.models.transformer import Transformer
         from INCLUDE.configs import TransformerConfig
 
-        # Prefer the 81% accurate model, fall back to 64% model
+        # Prefer the newly trained improved model, then fall back to older models
         possible_model_paths = [
+            os.path.join(project_root, 'include_no_cnn_transformer_small_improved.pth'),
             os.path.join(project_root, 'INCLUDE', 'include_no_cnn_transformer_small.pth'),
             os.path.join(project_root, 'augs_transformer.pth'),
         ]
@@ -148,8 +149,8 @@ def load_sign_to_speech_components():
             sign_model_loaded = False
             return False
 
-        # Use 263-class label map for include_no_cnn model, 50-class for augs_transformer
-        if 'include_no_cnn' in model_path:
+        # Use 263-class label map for include_no_cnn models (including improved), 50-class for augs_transformer
+        if 'include_no_cnn' in model_path or 'improved' in model_path:
             label_map_path = os.path.join(project_root, 'INCLUDE', 'label_maps', 'label_map_include.json')
             n_classes_expected = 263
         else:

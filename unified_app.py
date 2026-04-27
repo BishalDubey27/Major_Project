@@ -648,19 +648,27 @@ def get_video_playlist(query_text):
     logger.info(f"🔧 phrases: {len(known_phrases_sorted) if known_phrases_sorted else 'NONE'}, synonyms: {len(synonym_dict) if synonym_dict else 'NONE'}, faiss: {'loaded' if faiss_index else 'NONE'}")
     playlist = []
 
-    # --- Step 1: NLP preprocessing ---
-    preprocessed = nlp_preprocess(query_text)
+    # --- Step 1: Apply synonyms on RAW query FIRST (before NLP drops words) ---
+    raw_query = query_text.lower().strip()
+    if synonym_dict:
+        for synonym in sorted(synonym_dict.keys(), key=len, reverse=True):
+            pattern = r'\b' + re.escape(synonym) + r'\b'
+            if re.search(pattern, raw_query):
+                raw_query = re.sub(pattern, synonym_dict[synonym], raw_query)
+                logger.info(f"📝 Pre-NLP Synonym: '{synonym}' → '{synonym_dict[synonym]}' | query now: '{raw_query}'")
+
+    # --- Step 2: NLP preprocessing ---
+    preprocessed = nlp_preprocess(raw_query)
     logger.info(f"📝 After NLP preprocessing: '{preprocessed}'")
 
-    # --- Step 2: clean punctuation ---
+    # --- Step 3: clean punctuation ---
     space_maker = str.maketrans(string.punctuation, ' ' * len(string.punctuation))
     remaining_query = preprocessed.translate(space_maker).strip()
     remaining_query = re.sub(r'\s+', ' ', remaining_query)
     original_query = remaining_query
 
-    # --- Step 3: synonym expansion (multi-word phrases first, then single words) ---
+    # --- Step 4: synonym expansion again (catch any remaining synonyms after NLP) ---
     if synonym_dict:
-        # Sort synonyms longest-first so "good morning" matches before "good"
         for synonym in sorted(synonym_dict.keys(), key=len, reverse=True):
             replacement = synonym_dict[synonym]
             pattern = r'\b' + re.escape(synonym) + r'\b'

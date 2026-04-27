@@ -1407,6 +1407,11 @@ def health_check():
 
 # ==================== MAIN ====================
 
+# Initialize components regardless of how the app is started (e.g. gunicorn)
+logger.info("Initializing system components for production...")
+text_to_sign_loaded = load_text_to_sign_components()
+sign_to_speech_loaded = load_sign_to_speech_components()
+
 if __name__ == '__main__':
     import sys
     sys.stdout.reconfigure(encoding='utf-8', errors='replace')

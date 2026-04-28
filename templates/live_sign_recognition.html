@@ -98,11 +98,15 @@
         <canvas id="canvas"></canvas>
     </div>
 
-    <button id="record-btn" disabled>⏺ Record Sign (3s)</button>
+    <button id="record-btn" disabled>⏺ Record Sign (5s)</button>
 
     <div id="prediction-box">
         <div id="prediction-label">—</div>
-        <div id="status-msg">Press Record and perform a sign for 3 seconds</div>
+        <div id="status-msg">Press Record and perform a sign clearly for 5 seconds</div>
+    </div>
+
+    <div id="tips" style="margin-top:8px; padding:8px 12px; background:rgba(255,255,255,0.15); border-radius:8px; color:white; font-size:0.8rem;">
+        💡 <strong>Tips:</strong> Keep hands centered in frame · Good lighting · Perform sign slowly and clearly · Model recognizes 263 ISL signs
     </div>
 
     <div id="status-bar">
@@ -154,11 +158,11 @@
         recordBtn.classList.add('recording');
         predLabel.textContent = '—';
 
-        let t = 3;
-        statusMsg.textContent = `Recording… ${t}s`;
+        let t = 5;
+        statusMsg.textContent = `Recording… ${t}s — keep hands visible!`;
         const timer = setInterval(() => {
             t--;
-            if (t > 0) { statusMsg.textContent = `Recording… ${t}s`; }
+            if (t > 0) { statusMsg.textContent = `Recording… ${t}s — keep hands visible!`; }
             else { clearInterval(timer); mediaRecorder.stop(); }
         }, 1000);
     });
@@ -178,11 +182,15 @@
             const data = await res.json();
             if (data.success && data.recognized_text) {
                 predLabel.textContent = data.recognized_text;
-                statusMsg.textContent = 'Sign detected!';
+                const conf = data.confidence ? Math.round(data.confidence * 100) : 0;
+                statusMsg.textContent = `Sign detected! Confidence: ${conf}%`;
+                if (conf < 30) {
+                    statusMsg.textContent += ' (low — try again with clearer hand position)';
+                }
                 if (data.audio_url) new Audio(data.audio_url).play();
             } else {
                 predLabel.textContent = '—';
-                statusMsg.textContent = data.message || 'No sign detected — try again';
+                statusMsg.textContent = data.message || 'No sign detected — ensure hands are clearly visible and centered';
             }
         } catch(e) {
             statusMsg.textContent = 'Error: ' + e.message;
